@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+./idea/*
+./__pycache__/
+./tem
+
+# Local scratch / notes
+tmp/
+

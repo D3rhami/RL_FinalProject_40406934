@@ -1,0 +1,53 @@
+{
+  "student_id": "40406934",
+  "base_seed": 3,
+  "maze_size": 18,
+
+  "mdp": {
+    "gamma": 0.95,
+    "p_intended": 0.8,
+    "p_perpendicular": 0.1
+  },
+
+  "episode": {
+    "max_steps_multiplier": 3
+  },
+
+  "value_iteration": {
+    "theta": 1e-6,
+    "gamma_sweep": [0.90, 0.95, 0.99]
+  },
+
+  "q_learning": {
+    "alpha": 0.1,
+    "epsilon_start": 1.0,
+    "epsilon_min": 0.01,
+    "linear_decay_episodes": 5000,
+    "exponential_decay_rate": 0.995,
+    "num_episodes": 10000
+  },
+
+  "sarsa_lambda": {
+    "alpha": 0.1,
+    "epsilon_start": 1.0,
+    "epsilon_min": 0.01,
+    "exponential_decay_rate": 0.995,
+    "num_episodes": 10000,
+    "lambda_sweep": [0.0, 0.3, 0.7, 0.9],
+    "trace_type": "replacing"
+  },
+
+  "transfer": {
+    "beta_values": [0.25, 0.50, 0.75],
+    "similar_obstacle_change_pct": 0.175,
+    "different_obstacle_change_pct": 0.40
+  },
+
+  "paths": {
+    "map_file": "environments/maps/maze_40406934.json",
+    "raw_data": "results/raw_data/",
+    "models": "results/models/",
+    "figures": "results/figures/",
+    "videos": "results/videos/"
+  }
+}
