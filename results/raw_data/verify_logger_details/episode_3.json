@@ -1,0 +1,16 @@
+[
+  {
+    "step": 1,
+    "state": [
+      13,
+      12,
+      1,
+      66
+    ],
+    "action": 0,
+    "reward": -1.0,
+    "event": "door_open",
+    "direction": 0,
+    "done": false
+  }
+]

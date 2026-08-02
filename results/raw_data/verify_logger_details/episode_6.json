@@ -1,0 +1,16 @@
+[
+  {
+    "step": 1,
+    "state": [
+      0,
+      0,
+      0,
+      66
+    ],
+    "action": 0,
+    "reward": -5.0,
+    "event": "wall_hit",
+    "direction": 0,
+    "done": false
+  }
+]

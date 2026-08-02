@@ -1,0 +1,16 @@
+[
+  {
+    "step": 1,
+    "state": [
+      15,
+      16,
+      1,
+      66
+    ],
+    "action": 1,
+    "reward": 199.0,
+    "event": "goal_reached",
+    "direction": 1,
+    "done": true
+  }
+]

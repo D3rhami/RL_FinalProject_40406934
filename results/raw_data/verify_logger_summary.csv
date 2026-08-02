@@ -1,0 +1,10 @@
+episode_idx,total_reward,steps,success,wall_hits,penalty_entries,key_pickup_step,goal_reached_step,termination_reason,epsilon_final,lambda
+0,-146.0,66,False,10,4,,,energy_depleted,,
+1,49.0,1,False,0,0,1,,,,
+2,-5.0,1,False,0,0,,,,,
+3,-1.0,1,False,0,0,,,,,
+4,199.0,1,True,0,0,,1,goal_reached,,
+5,-11.0,1,False,0,1,,,,,
+6,-5.0,1,False,1,0,,,,,
+7,-1.0,1,False,0,0,,,energy_depleted,,
+8,-1.0,1,False,0,0,,,step_cap,,
