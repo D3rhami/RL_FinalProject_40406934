@@ -5,7 +5,7 @@
   "maze_file": "environments/maps/source_maze.json",
 
   "env": {
-    "max_energy": 200,
+    "max_energy": 66,
     "wall_fraction": 0.18,
     "n_penalty_cells": 7,
     "p_intended": 0.8,
@@ -14,12 +14,20 @@
   },
 
   "rewards": {
-    "step": -0.01,
-    "wall_hit": -0.5,
-    "penalty_cell": -1.0,
-    "key": 5.0,
-    "door_attempt": -0.1,
-    "goal": 20.0
+    "step": -1.0,
+    "wall_hit": -5.0,
+    "penalty_cell": -10.0,
+    "key": 50.0,
+    "door_attempt": -5.0,
+    "goal": 200.0
+  },
+
+  "shaping": {
+    "gamma_shaping": 0.95,
+    "distance_shaping_scale": 1.0,
+    "safe_distance_cap": 3,
+    "safe_passage_scale": 0.5,
+    "wasted_move_penalty": -3.0
   },
 
   "value_iteration": {

@@ -1,5 +1,6 @@
+from collections import deque
 from enum import IntEnum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 import json
 import numpy as np
 
@@ -63,7 +64,7 @@ class MazeEnv:
     Wall/boundary collision: agent stays, pays wall_hit reward.
     """
 
-    def __init__(self, map_path: str, config: dict = None,
+    def __init__(self, map_path: str, config: Optional[dict] = None,
                  reward_mode: str = 'sparse', seed: Optional[int] = None):
         cfg = config or load_config()
         self.reward_mode = reward_mode
@@ -76,6 +77,13 @@ class MazeEnv:
         self.R_KEY          = r['key']
         self.R_DOOR_ATTEMPT = r['door_attempt']
         self.R_GOAL         = r['goal']
+
+        sh = cfg.get('shaping', {})
+        self.SHAPE_GAMMA    = sh.get('gamma_shaping', 0.95)
+        self.DIST_SCALE     = sh.get('distance_shaping_scale', 0.02)
+        self.SAFE_DIST_CAP  = sh.get('safe_distance_cap', 3)
+        self.SAFE_SCALE     = sh.get('safe_passage_scale', 0.05)
+        self.WASTED_PENALTY = sh.get('wasted_move_penalty', -0.2)
 
         e = cfg['env']
         self.MAX_ENERGY  = e['max_energy']
@@ -101,6 +109,25 @@ class MazeEnv:
         self.door_pos      = tuple(data['door_pos'])
         self.goal_pos      = tuple(data['goal_pos'])
         self.penalty_cells = [tuple(p) for p in data['penalty_cells']]
+        self._compute_danger_distances()
+
+    def _compute_danger_distances(self):
+        size = self.maze_size
+        dist = np.full((size, size), size * 2, dtype=np.int32)
+        queue = deque()
+        for (r, c) in self.penalty_cells:
+            dist[r, c] = 0
+            queue.append((r, c))
+        while queue:
+            r, c = queue.popleft()
+            for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                nr, nc = r + dr, c + dc
+                if (0 <= nr < size and 0 <= nc < size and
+                        int(self.grid[nr, nc]) != CellType.WALL and
+                        dist[nr, nc] > dist[r, c] + 1):
+                    dist[nr, nc] = dist[r, c] + 1
+                    queue.append((nr, nc))
+        self.danger_dist = dist
 
     def reset(self, seed: Optional[int] = None):
         self.rng   = np.random.default_rng(seed if seed is not None else self.env_seed)
@@ -114,7 +141,7 @@ class MazeEnv:
             raise RuntimeError("Call reset() before step().")
 
         row, col, has_key, energy = self.state
-        info: Dict[str, Any] = {'event': 'move'}
+        info: Dict[str, Any] = {'event': 'move', 'termination_reason': None}
 
         rv = self.rng.random()
         if rv < self.P_INTENDED:
@@ -158,34 +185,54 @@ class MazeEnv:
                 info['event'] = 'key_pickup'
 
         if self.reward_mode == 'shaped':
-            reward += self._shaping_bonus(row, col, new_r, new_c, has_key)
+            wasted  = (new_r, new_c) == (row, col)
+            reward += self._shaping_bonus(row, col, new_r, new_c, has_key, wasted)
 
         new_energy = max(0, energy - 1)
         done = False
 
         if int(self.grid[new_r, new_c]) == CellType.GOAL and has_key == 1:
-            reward       += self.R_GOAL
-            info['event'] = 'goal_reached'
-            done          = True
+            reward                    += self.R_GOAL
+            info['event']              = 'goal_reached'
+            info['termination_reason'] = 'goal_reached'
+            done                       = True
 
         self.steps += 1
 
         if not done and new_energy <= 0:
-            info['event'] = 'energy_depleted'
-            done          = True
+            info['termination_reason'] = 'energy_depleted'
+            done                       = True
 
         if not done and self.steps >= self.max_steps:
-            info['event'] = 'step_cap'
-            done          = True
+            info['termination_reason'] = 'step_cap'
+            done                       = True
 
         self.state = (new_r, new_c, has_key, new_energy)
         return self.state, reward, done, info
 
-    def _shaping_bonus(self, old_r, old_c, new_r, new_c, has_key):
-        gamma  = 0.95
+    def _safe_potential(self, r, c) -> float:
+        d = int(self.danger_dist[r, c])
+        if d == 0 or d > self.SAFE_DIST_CAP:
+            return 0.0
+        return float(self.SAFE_DIST_CAP + 1 - d)
+
+    def _shaping_bonus(self, old_r, old_c, new_r, new_c, has_key, wasted) -> float:
+        if wasted:
+            return self.WASTED_PENALTY
+
+        gamma  = self.SHAPE_GAMMA
         tr, tc = self.key_pos if has_key == 0 else self.goal_pos
-        return gamma * -(abs(new_r - tr) + abs(new_c - tc)) \
-                     + (abs(old_r - tr) + abs(old_c - tc))
+
+        phi_old = -(abs(old_r - tr) + abs(old_c - tc))
+        phi_new = -(abs(new_r - tr) + abs(new_c - tc))
+        dist_bonus = self.DIST_SCALE * (gamma * phi_new - phi_old)
+
+        safe_bonus = self.SAFE_SCALE * (
+            gamma * self._safe_potential(new_r, new_c)
+            - self._safe_potential(old_r, old_c)
+        )
+
+        return dist_bonus + safe_bonus
 
     def transition_model(self, state, action):
         if self.is_terminal(state):
@@ -233,7 +280,8 @@ class MazeEnv:
                     reward += self.R_GOAL
 
             if self.reward_mode == 'shaped':
-                reward += self._shaping_bonus(row, col, new_r, new_c, has_key)
+                wasted  = (new_r, new_c) == (row, col)
+                reward += self._shaping_bonus(row, col, new_r, new_c, has_key, wasted)
 
             results.append((prob, (new_r, new_c, new_has_key, new_energy), reward))
 
