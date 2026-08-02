@@ -67,8 +67,14 @@ pip install -r requirements.txt
 ## Running the Project
 
 ```bash
-# Launch the Pygame GUI
+# Launch the Pygame GUI (Phase 10)
 python main.py
+
+# Run one algorithm via the CLI dispatcher
+python main.py --algo value_iteration --gamma 0.95 --max-iterations 1000
+python main.py --algo q_learning --schedule linear --num-episodes 10000
+python main.py --algo q_learning --schedule exponential --num-episodes 10000
+python main.py --algo sarsa_lambda --lam 0.7 --num-episodes 10000
 
 # Run all experiments headlessly
 python experiments/run_experiments.py
@@ -77,9 +83,23 @@ python experiments/run_experiments.py
 pytest tests/
 ```
 
+### Sanity-check a single episode with the logger
+
+```bash
+python -m experiments.verify_logger
+```
+
+This forces one scenario per required event type (move, wall_hit, penalty_entry,
+key_pickup, door_attempt, door_open, goal_reached, step_cap, energy_depleted)
+and asserts all 9 appear in the detailed per-step logs. Summary CSV and detail
+JSON files land in `results/raw_data/verify_logger_summary.csv` and
+`results/raw_data/verify_logger_details/`.
+
 ## Reproducing Results
 
-<!-- TODO: exact commands + config file pointers for every figure in the report -->
+<!-- TODO: fill in exact commands + config pointers for every figure once
+     Phase 5-7's full runs (VI gamma sweep, QL both schedules, SARSA(lambda)
+     sweep) have been executed locally via the commands above. -->
 
 ## Project Structure
 
