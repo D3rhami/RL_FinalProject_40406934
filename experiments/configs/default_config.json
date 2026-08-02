@@ -2,24 +2,35 @@
   "student_id": "40406934",
   "base_seed": 3,
   "maze_size": 18,
+  "maze_file": "environments/maps/source_maze.json",
 
-  "mdp": {
-    "gamma": 0.95,
+  "env": {
+    "max_energy": 200,
+    "wall_fraction": 0.18,
+    "n_penalty_cells": 7,
     "p_intended": 0.8,
-    "p_perpendicular": 0.1
-  },
-
-  "episode": {
+    "p_perp": 0.1,
     "max_steps_multiplier": 3
   },
 
+  "rewards": {
+    "step": -0.01,
+    "wall_hit": -0.5,
+    "penalty_cell": -1.0,
+    "key": 5.0,
+    "door_attempt": -0.1,
+    "goal": 20.0
+  },
+
   "value_iteration": {
+    "gamma": 0.95,
     "theta": 1e-6,
     "gamma_sweep": [0.90, 0.95, 0.99]
   },
 
   "q_learning": {
     "alpha": 0.1,
+    "gamma": 0.95,
     "epsilon_start": 1.0,
     "epsilon_min": 0.01,
     "linear_decay_episodes": 5000,
@@ -29,6 +40,7 @@
 
   "sarsa_lambda": {
     "alpha": 0.1,
+    "gamma": 0.95,
     "epsilon_start": 1.0,
     "epsilon_min": 0.01,
     "exponential_decay_rate": 0.995,
@@ -41,13 +53,5 @@
     "beta_values": [0.25, 0.50, 0.75],
     "similar_obstacle_change_pct": 0.175,
     "different_obstacle_change_pct": 0.40
-  },
-
-  "paths": {
-    "map_file": "environments/maps/maze_40406934.json",
-    "raw_data": "results/raw_data/",
-    "models": "results/models/",
-    "figures": "results/figures/",
-    "videos": "results/videos/"
   }
 }
