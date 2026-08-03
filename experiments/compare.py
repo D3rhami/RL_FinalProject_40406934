@@ -317,10 +317,6 @@ def main():
             writer.writerows(sample_rows)
         print(f"saved {out_dir / 'comparison_sample_states.csv'}")
 
-    # Policy-difference maps -- now generated for BOTH Q-Learning and SARSA(λ)
-    # against VI (previously only Q-Learning's were produced), and both use
-    # the visits-based masking from plot_policy_diff so unvisited states show
-    # as gray instead of a misleading agree/disagree color.
     ql_Q_by_state = {tuple(s): int(np.argmax(q)) for s, q in
                       zip(result['ql']['model']['states'], result['ql']['model']['Q'])}
     ql_visits_by_state = {tuple(s): v for s, v in

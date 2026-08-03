@@ -18,6 +18,8 @@ from agents.sarsa_lambda import SarsaLambdaAgent
 MAP_PATH = 'environments/maps/source_maze.json'
 LEDGER_PATH = Path('results/raw_data/run_ledger.csv')
 
+EVAL_REWARD_MODE = 'sparse'
+
 _ledger_rows = []
 
 
@@ -93,7 +95,7 @@ def run_value_iteration(cfg):
                 return _policy.get(state, 0)
 
             eval_metrics = evaluate_greedy_policy(
-                lambda: MazeEnv(MAP_PATH, config=cfg, reward_mode=reward_mode),
+                lambda: MazeEnv(MAP_PATH, config=cfg, reward_mode=EVAL_REWARD_MODE),
                 act_fn, cfg['experiment_grid']['eval_seed'], cfg['experiment_grid']['eval_episodes'],
             )
 
@@ -226,7 +228,7 @@ def run_q_learning(cfg):
                         return int(np.argmax(_agent.Q[idx]))
 
                     eval_metrics = evaluate_greedy_policy(
-                        lambda: MazeEnv(MAP_PATH, config=cfg, reward_mode=reward_mode),
+                        lambda: MazeEnv(MAP_PATH, config=cfg, reward_mode=EVAL_REWARD_MODE),
                         act_fn, grid['eval_seed'], grid['eval_episodes'],
                     )
 
@@ -372,7 +374,7 @@ def run_sarsa_lambda(cfg):
                     return int(np.argmax(_agent.Q[idx]))
 
                 eval_metrics = evaluate_greedy_policy(
-                    lambda: MazeEnv(MAP_PATH, config=cfg, reward_mode=reward_mode),
+                    lambda: MazeEnv(MAP_PATH, config=cfg, reward_mode=EVAL_REWARD_MODE),
                     act_fn, grid['eval_seed'], grid['eval_episodes'],
                 )
 

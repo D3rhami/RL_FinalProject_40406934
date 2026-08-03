@@ -5,7 +5,7 @@
   "maze_file": "environments/maps/source_maze.json",
 
   "env": {
-    "max_energy": 66,
+    "max_energy": 100,
     "wall_fraction": 0.18,
     "n_penalty_cells": 7,
     "p_intended": 0.8,
