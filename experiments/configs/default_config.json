@@ -61,5 +61,30 @@
     "beta_values": [0.25, 0.50, 0.75],
     "similar_obstacle_change_pct": 0.175,
     "different_obstacle_change_pct": 0.40
+  },
+
+  "experiment_grid": {
+    "seeds": [7, 21, 42],
+    "eval_seed": 999,
+    "eval_episodes": 100,
+
+    "value_iteration": {
+      "reward_mode": "sparse",
+      "gammas": [0.90, 0.95, 0.99],
+      "reference_gamma": 0.95
+    },
+
+    "q_learning": {
+      "reward_modes": ["sparse", "shaped"],
+      "schedules": ["linear", "exponential"],
+      "reference_reward_mode": "sparse",
+      "trace_run": {"reward_mode": "sparse", "schedule": "exponential", "seed": 7, "episode_index": 2500}
+    },
+
+    "sarsa_lambda": {
+      "reward_mode": "sparse",
+      "lambdas": [0.0, 0.3, 0.7, 0.9],
+      "trace_run": {"lambda": 0.9, "seed": 7, "episode_index": 4900}
+    }
   }
 }

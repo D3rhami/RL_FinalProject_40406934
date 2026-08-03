@@ -95,11 +95,47 @@ and asserts all 9 appear in the detailed per-step logs. Summary CSV and detail
 JSON files land in `results/raw_data/verify_logger_summary.csv` and
 `results/raw_data/verify_logger_details/`.
 
-## Reproducing Results
+### Eligibility trace type
 
-<!-- TODO: fill in exact commands + config pointers for every figure once
-     Phase 5-7's full runs (VI gamma sweep, QL both schedules, SARSA(lambda)
-     sweep) have been executed locally via the commands above. -->
+SARSA(lambda) uses `"trace_type": "replacing"` (see `experiments/configs/default_config.json`).
+Replacing traces cap `E(s,a)` at 1.0 on revisit, preventing runaway trace magnitudes
+on states visited many times within a single episode (loops near penalty cells,
+repeated wall-bump retries near the tight 66-energy budget). Accumulating traces
+would let those revisits stack unbounded, over-weighting frequently-revisited
+states in the update. The `E` dict in `agents/sarsa_lambda.py` (`SarsaLambdaAgent._apply_trace`)
+is a sparse dict keyed by `(state_idx, action)`, decayed by `gamma*lambda` every
+step and pruned once a trace drops below `1e-6` — this keeps updates fast even
+though the full state-action space has ~174,000 entries.
+
+## Reproducing Results (Phases 4-8)
+
+Full experiment grid: VI gamma-sweep (3 runs), Q-Learning (2 reward_modes x 2
+schedules x 3 seeds = 12 runs), SARSA(lambda) (4 lambdas x 3 seeds = 12 runs).
+All parameters live in `experiment_grid` in `experiments/configs/default_config.json`.
+
+```bash
+# Run everything (VI ~200s, QL ~100s, SARSA ~200s -- a few minutes total)
+python experiments/run_experiments.py
+
+# Or run a subset (re-run just one algorithm after a fix)
+python experiments/run_experiments.py vi
+python experiments/run_experiments.py q_learning
+python experiments/run_experiments.py sarsa
+
+# Generate all figures from the saved CSVs/models (Steps 28, 31, 39, 48)
+python experiments/analysis.py
+
+# Phase 8 cross-algorithm comparison (run only after the above succeeds)
+python experiments/compare.py
+```
+
+Outputs:
+- `results/raw_data/run_ledger.csv` -- one row per variant attempted (success/failed)
+- `results/raw_data/{vi,q_learning,sarsa}/*.csv` -- training curves + summaries
+- `results/models/{vi,q_learning,sarsa}/*.json` -- saved V/Q tables + policies
+- `results/figures/{vi,q_learning,sarsa,comparison}/*.png` -- all required figures
+- `results/raw_data/comparison/comparison_summary.csv` -- Phase 8 comparison table
+- `results/raw_data/comparison/comparison_sample_states.csv` -- the 3 required sample states (Step 54)
 
 ## Project Structure
 

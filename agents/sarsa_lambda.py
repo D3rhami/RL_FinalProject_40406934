@@ -21,6 +21,7 @@ class SarsaLambdaAgent:
 
         n = env.n_states
         self.Q = np.zeros((n, 4))
+        self.visits = np.zeros(n, dtype=np.int64)
 
     def epsilon_at(self, episode: int) -> float:
         if self.decay_type == 'linear':
@@ -57,6 +58,7 @@ class SarsaLambdaAgent:
 
     def sarsa_lambda_update(self, E: dict, s, a, r, s_next, a_next, done) -> float:
         s_idx = self.env.encode_state(s)
+        self.visits[s_idx] += 1
         if done:
             delta = r - self.Q[s_idx, a]
         else:
@@ -65,29 +67,46 @@ class SarsaLambdaAgent:
         self._apply_trace(E, s_idx, a, delta)
         return delta
 
-    def train(self, logger=None, keep_detail_episodes=None):
+    def train(self, logger=None, keep_detail_episodes=None,
+              step_callback=None, trace_episodes=None, trace_dump_callback=None):
         keep_detail_episodes = keep_detail_episodes or set()
+        trace_episodes = trace_episodes or set()
         for ep in range(self.num_episodes):
             epsilon = self.epsilon_at(ep)
             E = {}
             state = self.env.reset()
             action = self.select_action(state, epsilon)
             done = False
+            do_trace = ep in trace_episodes
             if logger:
                 logger.start_episode(ep, keep_detail=(ep in keep_detail_episodes),
                                       epsilon=epsilon, lam=self.lam)
+            step_idx = 0
             while not done:
                 s_next, r, done, info = self.env.step(action)
-                if done:
-                    self.sarsa_lambda_update(E, state, action, r, s_next, None, done)
-                    if logger:
-                        logger.log_step(state, action, r, info, done=done)
-                    break
-                a_next = self.select_action(s_next, epsilon)
-                self.sarsa_lambda_update(E, state, action, r, s_next, a_next, done)
+                a_next = None if done else self.select_action(s_next, epsilon)
+
+                delta = self.sarsa_lambda_update(E, state, action, r, s_next, a_next, done)
+
                 if logger:
                     logger.log_step(state, action, r, info, done=done)
+
+                if do_trace and step_callback:
+                    step_callback({
+                        'episode': ep, 'step': step_idx, 'state': state, 'action': action,
+                        'next_state': s_next, 'next_action': a_next, 'reward': r,
+                        'event': info.get('event'), 'delta': delta,
+                        'active_traces': len(E), 'alpha': self.alpha,
+                        'gamma': self.gamma, 'lam': self.lam, 'epsilon': epsilon,
+                    })
+                if do_trace and trace_dump_callback:
+                    for (s_idx, a_idx), e_val in E.items():
+                        trace_dump_callback(ep, step_idx, s_idx, a_idx, e_val)
+
+                if done:
+                    break
                 state, action = s_next, a_next
+                step_idx += 1
             if logger:
                 logger.end_episode()
         return self.Q

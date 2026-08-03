@@ -22,6 +22,7 @@ class EpisodeLogger:
         self._step_count = 0
         self._wall_hits = 0
         self._penalty_entries = 0
+        self._door_attempts = 0
         self._key_pickup_step = None
         self._goal_reached_step = None
         self._termination_reason = None
@@ -46,6 +47,8 @@ class EpisodeLogger:
             self._wall_hits += 1
         elif event == 'penalty_entry':
             self._penalty_entries += 1
+        elif event == 'door_attempt':
+            self._door_attempts += 1
         elif event == 'key_pickup' and self._key_pickup_step is None:
             self._key_pickup_step = self._step_count
         elif event == 'goal_reached' and self._goal_reached_step is None:
@@ -74,6 +77,7 @@ class EpisodeLogger:
             'success': self._termination_reason == 'goal_reached',
             'wall_hits': self._wall_hits,
             'penalty_entries': self._penalty_entries,
+            'door_attempts': self._door_attempts,
             'key_pickup_step': self._key_pickup_step,
             'goal_reached_step': self._goal_reached_step,
             'termination_reason': self._termination_reason,
