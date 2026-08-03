@@ -84,7 +84,7 @@ def run_value_iteration(cfg):
     grid_cfg = cfg['experiment_grid']['value_iteration']
     vi_cfg = cfg['value_iteration']
     reward_mode = grid_cfg['reward_mode']
-    _, eval_seed = derive_seeds(cfg['base_seed'])
+    _, eval_seed = derive_seeds(cfg['base_seed'], n=cfg['experiment_grid']['n_seeds'])
     rows = []
 
     for gamma in grid_cfg['gammas']:

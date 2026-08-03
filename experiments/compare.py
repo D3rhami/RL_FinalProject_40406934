@@ -27,7 +27,8 @@ def _check_prereqs(cfg):
     grid = cfg['experiment_grid']
     seeds, _ = derive_seeds(cfg['base_seed'], n=grid['n_seeds'])
     ref_gamma = grid['value_iteration']['reference_gamma']
-    vi_path = Path(f'results/models/vi/vi_sparse_gamma{ref_gamma}.json')
+    vi_rm = grid['value_iteration']['reward_mode']
+    vi_path = Path(f'results/models/vi/vi_{vi_rm}_gamma{ref_gamma}.json')
     missing = []
     if not vi_path.exists():
         missing.append(str(vi_path))
@@ -80,7 +81,7 @@ def build_comparison(cfg):
     ref_gamma = grid['value_iteration']['reference_gamma']
     vi_reward_mode = grid['value_iteration']['reward_mode']
 
-    vi_model = _load_json(f'results/models/vi/vi_sparse_gamma{ref_gamma}.json')
+    vi_model = _load_json(f'results/models/vi/vi_{vi_reward_mode}_gamma{ref_gamma}.json')
     vi_states = [tuple(s) for s in vi_model['states']]
     vi_policy = {s: a for s, a in zip(vi_states, vi_model['policy']) if a != -1}
     vi_V = np.array(vi_model['V'])

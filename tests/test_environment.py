@@ -196,7 +196,7 @@ def test_has_key_monotone(sparse_env):
 
 
 def test_termination_distribution_with_energy(cfg):
-    """With max_energy=66, random policy should hit energy_depleted in many episodes."""
+    """With default max_energy, random policy should often hit energy_depleted."""
     env = MazeEnv(MAP_PATH, config=cfg, reward_mode='sparse', seed=99)
     counts = {}
     for ep in range(100):

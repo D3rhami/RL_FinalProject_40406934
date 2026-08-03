@@ -26,3 +26,9 @@ timestamp,algorithm,variant_id,seed,status,runtime_seconds,error_message,output_
 2026-08-04 02:15:57,sarsa_lambda,sarsa_sparse_lambda0.9_seed81150,81150,success,35.708,,results/models/sarsa/sarsa_sparse_lambda0.9_seed81150.json
 2026-08-04 02:16:34,sarsa_lambda,sarsa_sparse_lambda0.9_seed8565,8565,success,36.942,,results/models/sarsa/sarsa_sparse_lambda0.9_seed8565.json
 2026-08-04 02:17:05,sarsa_lambda,sarsa_sparse_lambda0.9_seed17944,17944,success,31.061,,results/models/sarsa/sarsa_sparse_lambda0.9_seed17944.json
+2026-08-04 02:56:54,value_iteration,vi_sparse_gamma0.9,,success,130.127,,results/models/vi/vi_sparse_gamma0.9.json
+2026-08-04 02:59:25,value_iteration,vi_sparse_gamma0.95,,success,151.164,,results/models/vi/vi_sparse_gamma0.95.json
+2026-08-04 03:02:11,value_iteration,vi_sparse_gamma0.99,,success,166.207,,results/models/vi/vi_sparse_gamma0.99.json
+2026-08-04 02:58:28,value_iteration,vi_sparse_gamma0.9,,success,135.251,,results/models/vi/vi_sparse_gamma0.9.json
+2026-08-04 03:01:01,value_iteration,vi_sparse_gamma0.95,,success,153.659,,results/models/vi/vi_sparse_gamma0.95.json
+2026-08-04 03:03:39,value_iteration,vi_sparse_gamma0.99,,success,157.74,,results/models/vi/vi_sparse_gamma0.99.json

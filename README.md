@@ -67,21 +67,30 @@ pip install -r requirements.txt
 ## Running the Project
 
 ```bash
-# Launch the Pygame GUI (Phase 10)
+# Launch the GUI (Phase 10 — not yet wired)
 python main.py
 
-# Run one algorithm via the CLI dispatcher
+# Single-algorithm CLI (saves models under results/models/ in the same schema
+# as the full pipeline; useful for a quick smoke check or one-off re-run)
 python main.py --algo value_iteration --gamma 0.95 --max-iterations 1000
 python main.py --algo q_learning --schedule linear --num-episodes 10000
 python main.py --algo q_learning --schedule exponential --num-episodes 10000
 python main.py --algo sarsa_lambda --lam 0.7 --num-episodes 10000
 
-# Run all experiments headlessly
+# Full experiment grid (the real pipeline for analysis/compare)
 python experiments/run_experiments.py
+
+# Energy-budget probe (shows the custom fuel feature has a real effect)
+python experiments/energy_sweep.py
 
 # Run unit tests
 pytest tests/
 ```
+
+`main.py --algo …` writes a single model JSON (+ a summary CSV for QL/SARSA)
+compatible with `results/models/{vi,q_learning,sarsa}/`. It does **not** produce
+the full multi-seed / multi-variant CSVs that `analysis.py` and `compare.py`
+expect — use `experiments/run_experiments.py` for that.
 
 ### Sanity-check a single episode with the logger
 
@@ -100,12 +109,19 @@ JSON files land in `results/raw_data/verify_logger_summary.csv` and
 SARSA(lambda) uses `"trace_type": "replacing"` (see `experiments/configs/default_config.json`).
 Replacing traces cap `E(s,a)` at 1.0 on revisit, preventing runaway trace magnitudes
 on states visited many times within a single episode (loops near penalty cells,
-repeated wall-bump retries near the tight 66-energy budget). Accumulating traces
+repeated wall-bump retries near the energy budget). Accumulating traces
 would let those revisits stack unbounded, over-weighting frequently-revisited
 states in the update. The `E` dict in `agents/sarsa_lambda.py` (`SarsaLambdaAgent._apply_trace`)
 is a sparse dict keyed by `(state_idx, action)`, decayed by `gamma*lambda` every
 step and pruned once a trace drops below `1e-6` — this keeps updates fast even
-though the full state-action space has ~174,000 entries.
+though the full state-action space has ~65,000 entries at `max_energy=100`.
+
+### Trace-run seed note
+
+`experiment_grid.*.trace_run` selects which *variant* gets a detailed step dump
+(reward_mode / schedule / λ / episode_index). The training seed for that dump is
+deliberately `seeds[0]` from `derive_seeds(...)`, not a separate config field —
+so the traced episode always comes from a seed that was actually trained.
 
 ## Reproducing Results (Phases 4-8)
 
