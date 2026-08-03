@@ -145,8 +145,8 @@ def plot_sarsa_lambda_comparison(training_csv, summary_csv, out_path):
 def main():
     cfg = load_config()
     grid = cfg['experiment_grid']
-
     vi_gamma = grid['value_iteration']['reference_gamma']
+
     vi_model_path = Path(f'results/models/vi/vi_sparse_gamma{vi_gamma}.json')
     vi_csv_path = Path('results/raw_data/vi/vi_gamma_sweep.csv')
     if vi_model_path.exists():
@@ -161,20 +161,23 @@ def main():
     ql_training = Path('results/raw_data/q_learning/q_learning_training.csv')
     if ql_training.exists():
         ref_schedule = grid['q_learning']['trace_run']['schedule']
-        plot_ql_schedule_comparison(ql_training, 'results/figures/q_learning/ql_schedule_comparison.png',
-                                     reward_mode=grid['q_learning']['reference_reward_mode'])
-        plot_ql_rewardmode_comparison(ql_training, 'results/figures/q_learning/ql_rewardmode_comparison.png',
-                                       schedule=ref_schedule)
+        plot_ql_schedule_comparison(
+            ql_training, 'results/figures/q_learning/ql_schedule_comparison.png',
+            reward_mode=grid['q_learning']['reference_reward_mode'])
+        plot_ql_rewardmode_comparison(
+            ql_training, 'results/figures/q_learning/ql_rewardmode_comparison.png',
+            schedule=ref_schedule)
     else:
         print(f'skip QL figures: {ql_training} not found')
 
     sarsa_training = Path('results/raw_data/sarsa/sarsa_training.csv')
-    sarsa_summary = Path('results/raw_data/sarsa/sarsa_summary.csv')
-    if sarsa_training.exists() and sarsa_summary.exists():
-        plot_sarsa_lambda_comparison(sarsa_training, sarsa_summary,
-                                      'results/figures/sarsa/sarsa_lambda_comparison.png')
+    sarsa_summary_path = Path('results/raw_data/sarsa/sarsa_summary.csv')
+    if sarsa_training.exists() and sarsa_summary_path.exists():
+        plot_sarsa_lambda_comparison(
+            sarsa_training, sarsa_summary_path,
+            'results/figures/sarsa/sarsa_lambda_comparison.png')
     else:
-        print(f'skip SARSA figure: missing {sarsa_training} or {sarsa_summary}')
+        print(f'skip SARSA figure: {sarsa_training} or {sarsa_summary_path} not found')
 
 
 if __name__ == '__main__':

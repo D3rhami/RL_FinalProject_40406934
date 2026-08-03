@@ -64,8 +64,7 @@
   },
 
   "experiment_grid": {
-    "seeds": [7, 21, 42],
-    "eval_seed": 999,
+    "n_seeds": 3,
     "eval_episodes": 100,
 
     "value_iteration": {
@@ -78,13 +77,13 @@
       "reward_modes": ["sparse", "shaped"],
       "schedules": ["linear", "exponential"],
       "reference_reward_mode": "sparse",
-      "trace_run": {"reward_mode": "sparse", "schedule": "exponential", "seed": 7, "episode_index": 2500}
+      "trace_run": {"reward_mode": "sparse", "schedule": "exponential", "episode_index": 2500}
     },
 
     "sarsa_lambda": {
       "reward_mode": "sparse",
       "lambdas": [0.0, 0.3, 0.7, 0.9],
-      "trace_run": {"lambda": 0.9, "seed": 7, "episode_index": 4900}
+      "trace_run": {"lambda": 0.9, "episode_index": 4900}
     }
   }
 }
