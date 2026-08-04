@@ -1,0 +1,4 @@
+algorithm,type,progress_unit,main_output,runtime_seconds,convergence,samples_needed,stability,eval_success_rate,eval_mean_steps,vi_agreement_visited,median_action_gap
+value_iteration,model-based,bellman_iteration,"V,policy",50.22133183479309,True,61,,1.0,38.75,1.0,0.0
+q_learning,model-free/off-policy,episode,"Q,policy",,,4508.333333333333,0.04041451884327381,0.41333333333333333,58.160000000000004,0.448618219037871,1.1587900253734986
+sarsa_lambda,model-free/on-policy,episode,"Q,E,policy",,,nan,7.851352441940089,0.0,60.0,0.32318027054384835,3.134950844577201
