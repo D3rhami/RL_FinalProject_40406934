@@ -1,0 +1,8 @@
+max_energy,shortest_path,bfs_valid,n_states,random_episodes,random_energy_depleted_rate,random_goal_rate,random_step_cap_rate,random_mean_return,random_mean_steps,vi_gamma,vi_eval_success_rate,vi_eval_mean_return,vi_eval_mean_steps,vi_iterations,vi_runtime_seconds,vi_converged
+30,30,True,20088,50,1.0,0.0,0.0,-54.84,30.0,0.95,0.0,15.92,30.0,31,16.7,True
+50,30,True,33048,50,1.0,0.0,0.0,-95.84,50.0,0.95,0.98,199.75,38.69,51,46.61,True
+60,30,True,39528,50,1.0,0.0,0.0,-116.92,60.0,0.95,1.0,203.65,38.75,61,68.53,True
+80,30,True,52488,50,1.0,0.0,0.0,-160.92,80.0,0.95,1.0,203.65,38.75,81,121.23,True
+100,30,True,65448,50,1.0,0.0,0.0,-199.68,100.0,0.95,1.0,203.65,38.75,92,142.81,True
+150,30,True,97848,50,1.0,0.0,0.0,-300.72,150.0,0.95,1.0,203.65,38.75,92,195.79,True
+200,30,True,130248,50,1.0,0.0,0.0,-412.08,200.0,0.95,1.0,203.65,38.75,92,256.93,True

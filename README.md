@@ -153,6 +153,68 @@ Outputs:
 - `results/raw_data/comparison/comparison_summary.csv` -- Phase 8 comparison table
 - `results/raw_data/comparison/comparison_sample_states.csv` -- the 3 required sample states (Step 54)
 
+### Energy budget selection (`max_energy`)
+
+The custom fuel feature is only meaningful if the energy budget is a *real* constraint:
+big enough that the maze stays solvable, small enough that fuel still decides episodes.
+Probed with `experiments/energy_sweep.py` (random-policy read + Value Iteration to
+convergence for the optimality signal):
+
+```bash
+python experiments/energy_sweep.py --budgets 30 50 60 80 100 150 200 --episodes 50
+```
+
+Shortest feasible path start→key→goal = **30** (BFS-valid at every budget ≥ 30).
+
+**The random-policy column cannot decide this on its own.** A uniform-random policy
+dies of `energy_depleted` in 100% of episodes at *every* budget from 30 through 200
+(goal rate 0.00, one lucky episode at 200), and `random_mean_steps` simply mirrors the
+budget itself (30.0, 50.0, 60.0 …). A random walk never gets close to solving an
+18×18 key→door→goal maze at any of these values, so it is not the right lens for
+finding the constraint boundary. The real signal is **VI success rate**: VI computes
+the *optimal* policy, so it shows where the budget becomes too tight to solve at all
+(30), where it is borderline (50), and where it is tight-but-reliable (60).
+
+| `max_energy` | n_states | random energy-depleted | random goal | VI success | VI mean return | VI mean steps | VI iters | VI runtime |
+|--------------|----------|------------------------|-------------|------------|----------------|---------------|----------|------------|
+| 30           | 20,088   | 1.00                   | 0.00        | **0.00**   | 15.92          | 30.0          | 31       | 16.7 s     |
+| 50           | 33,048   | 1.00                   | 0.00        | 0.98       | 199.75         | 38.69         | 51       | 46.6 s     |
+| **60**       | 39,528   | 1.00                   | 0.00        | **1.00**   | 203.65         | 38.75         | 61       | 68.5 s     |
+| 80           | 52,488   | 1.00                   | 0.00        | 1.00       | 203.65         | 38.75         | 81       | 121.2 s    |
+| 100          | 65,448   | 1.00                   | 0.00        | 1.00       | 203.65         | 38.75         | 92       | 142.8 s    |
+| 150          | 97,848   | 1.00                   | 0.00        | 1.00       | 203.65         | 38.75         | 92       | 195.8 s    |
+| 200          | 130,248  | 1.00                   | 0.00        | 1.00       | 203.65         | 38.75         | 92       | 256.9 s    |
+
+**Decision rule:** smallest budget where VI still *reliably* succeeds
+(`vi_eval_success_rate` ≈ 1.0).
+
+- **30** → VI success **0.00**: the budget equals the BFS path length, leaving zero
+  slack for the 0.8/0.1/0.1 stochastic transitions, so even the optimal policy cannot
+  finish. Infeasible.
+- **50** → VI success **0.98**: 1 failure in 50 eval episodes. Borderline — mostly
+  works but not reliable, so it fails the decision rule.
+- **60** → VI success **1.00** with the same optimal return/steps as every larger
+  budget (203.65 / 38.75). **This is the smallest budget with a fully reliable optimal
+  policy, i.e. the tight-but-solvable boundary.**
+
+**Decision: `max_energy = 60`.**
+
+- It is a genuine constraint: random policy dies of fuel in 100% of episodes, and the
+  budget (60) is only ~1.5× the ~39 energy units the optimal policy actually needs —
+  fuel still binds.
+- It is solvable: VI converges (61 iters) and its greedy policy wins 100% of evals.
+- Budgets 80–200 add no optimality (identical 1.00 / 203.65 / 38.75) but strictly
+  grow the MDP (52,488 → 130,248 states) and VI runtime (121 s → 257 s). VI iteration
+  count even plateaus at 92 once the budget stops binding, so beyond ~100 the extra
+  state space buys nothing.
+- Note that even at 200 the *random* policy only reaches the goal on 1/200 episodes,
+  so the earlier max_energy=200 "failure" was about the budget ceasing to bind an
+  *optimal* agent — energy never stops being fatal for a no-skill policy.
+
+**Caveat:** `experiments/configs/default_config.json` still sets `"max_energy": 100`.
+The final full-grid runs (Phases 4–8) should be re-run at 60 for the tighter,
+smaller MDP before locking in the numbers in this README.
+
 ## Project Structure
 
 ```

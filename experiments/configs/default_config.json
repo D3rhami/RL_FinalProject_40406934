@@ -5,8 +5,8 @@
   "maze_file": "environments/maps/source_maze.json",
 
   "env": {
-    "max_energy": 100,
-    "energy_sweep": [50, 60, 80,100],
+    "max_energy": 60,
+    "energy_sweep": [50, 60, 80,100,150,200],
     "wall_fraction": 0.18,
     "n_penalty_cells": 7,
     "p_intended": 0.8,
