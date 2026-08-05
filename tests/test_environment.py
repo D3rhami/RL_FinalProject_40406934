@@ -29,7 +29,8 @@ def test_reset_state(sparse_env):
 
 
 def test_encode_decode_roundtrip(sparse_env):
-    for st in [(1, 1, 0, 66), (16, 16, 1, 33), (6, 6, 1, 0), (0, 0, 0, 1)]:
+    max_e = sparse_env.MAX_ENERGY
+    for st in [(1, 1, 0, max_e), (16, 16, 1, max_e // 2), (6, 6, 1, 0), (0, 0, 0, 1)]:
         assert sparse_env.decode_state(sparse_env.encode_state(st)) == st
 
 

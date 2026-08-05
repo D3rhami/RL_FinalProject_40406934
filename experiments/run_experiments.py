@@ -19,6 +19,11 @@ from agents.sarsa_lambda import SarsaLambdaAgent
 MAP_PATH = 'environments/maps/source_maze.json'
 LEDGER_PATH = Path('results/raw_data/run_ledger.csv')
 
+# All evaluation (greedy rollouts) uses this reward_mode regardless of the
+# variant's training reward_mode, so eval_mean_return is comparable across
+# sparse- and shaped-trained agents (shaping bonus must not leak into eval).
+EVAL_REWARD_MODE = 'sparse'
+
 _ledger_rows = []
 
 
@@ -98,7 +103,7 @@ def run_value_iteration(cfg):
             policy = vi.extract_policy(V)
             states = env.all_states()
 
-            eval_env = MazeEnv(MAP_PATH, config=cfg, reward_mode=reward_mode)
+            eval_env = MazeEnv(MAP_PATH, config=cfg, reward_mode=EVAL_REWARD_MODE)
             eval_metrics = evaluate_greedy_policy(
                 eval_env, lambda s, _p=policy: _p.get(s, 0),
                 eval_seed, cfg['experiment_grid']['eval_episodes'],
@@ -232,7 +237,7 @@ def run_q_learning(cfg):
 
                     states = env.all_states()
                     state_indices = [env.encode_state(s) for s in states]
-                    eval_env = MazeEnv(MAP_PATH, config=cfg, reward_mode=reward_mode)
+                    eval_env = MazeEnv(MAP_PATH, config=cfg, reward_mode=EVAL_REWARD_MODE)
 
                     def act_fn(state, _a=agent):
                         return int(np.argmax(_a.Q[_a.env.encode_state(state)]))
@@ -387,7 +392,7 @@ def run_sarsa_lambda(cfg):
 
                 states = env.all_states()
                 state_indices = [env.encode_state(s) for s in states]
-                eval_env = MazeEnv(MAP_PATH, config=cfg, reward_mode=reward_mode)
+                eval_env = MazeEnv(MAP_PATH, config=cfg, reward_mode=EVAL_REWARD_MODE)
 
                 def act_fn(state, _a=agent):
                     return int(np.argmax(_a.Q[_a.env.encode_state(state)]))

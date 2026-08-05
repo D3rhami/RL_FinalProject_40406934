@@ -1,7 +1,7 @@
 algorithm,category,state,vi_action,agent_action,action_gap,visits
-q_learning,largest_action_gap,"(14, 14, 1, 4)",3,1,79.59539925000001,2
-q_learning,smallest_nonzero_gap,"(12, 5, 1, 13)",1,0,3.639854526227282e-06,5
-q_learning,nearest_penalty_cell,"(2, 6, 0, 2)",2,1,0.3980000000000006,36
-sarsa_lambda,largest_action_gap,"(14, 16, 1, 3)",1,3,117.0134,3
+q_learning,largest_action_gap,"(17, 11, 1, 8)",3,0,74.08496199488755,37
+q_learning,smallest_nonzero_gap,"(13, 9, 1, 8)",0,3,1.3647716042619606e-05,48
+q_learning,nearest_penalty_cell,"(2, 6, 0, 11)",2,1,1.2878092950058857,95
+sarsa_lambda,largest_action_gap,"(13, 13, 1, 7)",1,0,71.06267294171984,17
 sarsa_lambda,smallest_nonzero_gap,"(13, 6, 1, 11)",0,2,1.0480217813579884e-06,43
-sarsa_lambda,nearest_penalty_cell,"(2, 6, 0, 1)",1,2,0.40000000000000013,5
+sarsa_lambda,nearest_penalty_cell,"(7, 6, 1, 35)",3,0,6.454855546772315,36
