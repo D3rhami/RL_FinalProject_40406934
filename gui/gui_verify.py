@@ -1,6 +1,3 @@
-"""
-gui_verify.py — snapshot / widget manifest / GIF helpers (Windows + Pillow).
-"""
 import time
 from pathlib import Path
 

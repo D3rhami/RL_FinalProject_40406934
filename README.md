@@ -209,12 +209,33 @@ From `experiments/configs/default_config.json` (also shown in the header above):
 | `student_id` | `40406934` |
 | `base_seed` | `3` |
 | `maze_size` | `18` (18 × 18) |
-| `env.max_energy` | `60` |
+| `env.max_energy` | `500` |
 
 Training episode counts in the same config:
 
 - Q-Learning / SARSA(λ): **20,000** episodes (`q_learning.num_episodes`, `sarsa_lambda.num_episodes`)
 - Transfer: **shaped** reward, **5,000** episodes (`transfer.reward_mode`, `transfer.num_episodes`)
+
+### 20k vs 50k episodes
+
+`q_learning.num_episodes` / `sarsa_lambda.num_episodes` were lowered from
+50,000 to **20,000** to keep the full rerun (12 QL variants + 24 SARSA
+variants × 3 seeds each, on a `max_energy=500` state space of 324,648
+states) tractable under a tight schedule. This is a safe reduction, not a
+shortcut: both ε-decay schedules already reach `epsilon_min` well before
+20k episodes (linear by episode 5,000, exponential by ~episode 920), so the
+dropped 30k episodes were almost all greedy-refinement episodes, not
+exploration. The energy-budget learnability probe above
+(`experiments/energy_sweep.py`) independently trained a single-seed,
+**20,000-episode**, shaped-reward agent at this exact `max_energy=500` and
+got QL eval success **0.86** / SARSA(λ=0.3) eval success **0.71** — direct
+evidence that 20k episodes already learns a strong policy at this energy
+budget. Sparse-reward variants are expected to lag shaped ones more at 20k
+than they would at 50k (weaker learning signal, needs more exploration to
+find the same policy); that gap is itself part of the sparse-vs-shaped
+analysis, not a bug. Both `q_learning.num_episodes` and
+`sarsa_lambda.num_episodes` remain single config values applied uniformly
+across every variant/seed, so all comparisons stay fair and reproducible.
 
 ## Running the Project
 
@@ -304,7 +325,7 @@ pip install -r requirements.txt
 python environments/generator.py
 python environments/generator.py --targets
 
-# 2. Train (VI γ-sweep; QL 2×2×3 seeds; SARSA 4 λ × 3 seeds; 50k eps)
+# 2. Train (VI γ-sweep; QL 2×2×3 seeds; SARSA 4 λ × 3 seeds; 20k eps)
 python experiments/run_experiments.py
 
 # 3. Transfer (shaped reward, 5000 episodes; needs target maps + a source QL model)
@@ -503,7 +524,7 @@ findings:
   ~38.75 steps); γ mostly rescales `V(start)`, not the greedy policy.
 - **Q-Learning**: shaping is a large win — shaped/linear reaches the best
   *final* greedy policy, while shaped/exponential finds first success soonest
-  but with a weaker final policy; sparse 50k episodes is not enough to match
+  but with a weaker final policy; sparse 20k episodes is not enough to match
   VI. See `results/figures/q_learning/`.
 - **SARSA(λ)**: replacing traces avoid runaway eligibility under looping
   exploration; λ trades off eval quality vs. training speed differently

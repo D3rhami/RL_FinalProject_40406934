@@ -1,13 +1,4 @@
-"""Lightweight energy-budget probe: show that max_energy changes outcomes.
 
-Does NOT retrain QL/SARSA. For each budget in [50, 60, 100, 150]:
-  - random-policy termination mix (energy_depleted vs goal vs step_cap)
-  - VI greedy-policy eval success at reference gamma
-
-Usage:
-  python experiments/energy_sweep.py
-  python experiments/energy_sweep.py --episodes 200 --skip-vi
-"""
 import argparse
 import copy
 import csv

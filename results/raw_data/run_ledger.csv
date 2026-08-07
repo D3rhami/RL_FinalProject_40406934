@@ -1,0 +1,4 @@
+timestamp,algorithm,variant_id,seed,status,runtime_seconds,error_message,output_files
+2026-08-07 21:29:10,value_iteration,vi_sparse_gamma0.9,,success,687.02,,results/models/vi/vi_sparse_gamma0.9.json
+2026-08-07 21:46:06,value_iteration,vi_sparse_gamma0.95,,success,1016.227,,results/models/vi/vi_sparse_gamma0.95.json
+2026-08-07 22:00:50,value_iteration,vi_sparse_gamma0.99,,success,883.278,,results/models/vi/vi_sparse_gamma0.99.json

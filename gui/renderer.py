@@ -1,6 +1,3 @@
-"""
-Premium maze canvas renderer (plain tk.Canvas — no CTkCanvas).
-"""
 import tkinter as tk
 
 from environments.maze import CellType

@@ -222,5 +222,9 @@ __marimo__/
 
 # Local scratch / notes
 tmp/
-
+.venv_check
+.venv_check/*
+.venv/*
+.venv
 /report/*
+run_all.py
