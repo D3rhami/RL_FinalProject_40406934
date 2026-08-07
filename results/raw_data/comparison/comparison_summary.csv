@@ -1,0 +1,4 @@
+algorithm,type,progress_unit,main_output,runtime_seconds,convergence,samples_needed,stability,stability_definition,eval_success_rate,eval_mean_steps,vi_agreement_visited,near_penalty_agreement,median_action_gap
+value_iteration,model-based,bellman_iteration,"V,policy",987.4000232219696,True,92,,n/a (deterministic algorithm),1.0,38.75,1.0,1.0,0.0
+q_learning,model-free/off-policy,episode,"Q,policy",12.748083333333334,,nan,0.0,cross-seed std of eval_success_rate,0.0,500.0,0.32228767379089074,0.3596722095944491,5.852976718956077
+sarsa_lambda,model-free/on-policy,episode,"Q,E,policy",14.124583333333334,,nan,156.82254688483778,"mean within-run std of return, last 1000 episodes",0.0,500.0,0.2192194003740122,0.17613310384394723,5.913574324843729
