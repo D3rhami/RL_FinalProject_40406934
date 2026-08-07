@@ -11,14 +11,15 @@
 3. [Algorithms](#algorithms)
 4. [Transfer Learning](#transfer-learning)
 5. [GUI](#gui)
-6. [Installation](#installation)
-7. [Config identity](#config-identity)
-8. [Running the Project](#running-the-project)
-9. [Reproducing Results](#reproducing-results-phases-4-9)
-10. [Project Structure](#project-structure)
-11. [Results Summary](#results-summary)
-12. [AI Usage Disclosure](#ai-usage-disclosure)
-13. [References](#references)
+6. [Report](#report)
+7. [Installation](#installation)
+8. [Config identity](#config-identity)
+9. [Running the Project](#running-the-project)
+10. [Reproducing Results](#reproducing-results-phases-4-9)
+11. [Project Structure](#project-structure)
+12. [Results Summary](#results-summary)
+13. [AI Usage Disclosure](#ai-usage-disclosure)
+14. [References](#references)
 
 ---
 
@@ -33,9 +34,12 @@ and reward definition: **Value Iteration** (model-based), **Q-Learning**
 eligibility traces). A limited transfer-learning study reuses a trained
 Q-Learning table on two derived target maps. A `customtkinter` GUI drives the
 same environment/agents live. The full analytical write-up (MDP definition,
-per-algorithm results, comparison, transfer, Q1–Q6) is in `report/draft.html`;
-this README covers install/run/reproduce and points out a few
-implementation subtleties worth knowing before you read the report.
+per-algorithm results, comparison, transfer, Q1–Q6, AI-usage disclosure), in
+Persian, is the LaTeX report at `report/main.tex`, compiled to
+**`report_derhami_40406934.pdf`** in the repository root (see
+[Report](#report) below); this README covers install/run/reproduce and
+points out a few implementation subtleties worth knowing before you read
+the report.
 
 ## Environment & MDP
 
@@ -185,7 +189,47 @@ per-cell greedy arrows for the agent's *current* `(has_key, energy)` slice.
   (`scratch`, `full`, `scaled_0.25/0.5/0.75`, `selective`) — previously the
   GUI only ever loaded the `full` scenario model.
 
-## Installation
+## Report
+
+The full Persian (Farsi) write-up lives in `report/` as a XeLaTeX/`xepersian`
+document:
+
+```
+report/
+├── main.tex              # top-level document, includes settings + all chapters
+├── settings.tex          # packages, fonts (xepersian, Vazir), macros (\eng, \codepath)
+├── sections/*.tex        # one file per chapter (intro/MDP, energy budget, VI,
+│                         #   Q-Learning, SARSA(λ), comparison, transfer, GUI,
+│                         #   analytical Q1–Q6, AI disclosure, conclusion)
+├── figures/<topic>/      # every figure the report includes
+├── FIGURE_SOURCES.md     # exact provenance of every figure (which run produced it)
+└── compile.ps1           # compiles main.tex and copies the PDF to the repo root
+```
+
+Compile with a TeX distribution that has XeLaTeX + `xepersian` (MiKTeX or
+TeX Live; `xepersian` must be able to auto-install or already be present),
+and a Persian font — the report is configured for **Vazir** (free, open
+font) in `settings.tex`; swap `\settextfont{...}` there if you use a
+different one (e.g. `B Nazanin`, `XB Niloofar`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File report/compile.ps1
+```
+
+This runs `xelatex` twice (needed for the table of contents/figure list)
+and copies the result to **`report_derhami_40406934.pdf`** in the
+repository root. Equivalently, from inside `report/`: `xelatex main.tex`
+(twice).
+
+`report/sections/00_notes_on_data.tex` explains an important detail up
+front: every number/figure in the analytical chapters comes from the last
+fully-completed multi-seed run, recorded under `max_energy=60`
+(`tmp/old_results_backup/energy60_full_run/`), because the project's
+production setting was later changed to `max_energy=500` after the
+learnability audit in the energy-budget chapter — and that new multi-seed
+run was still in progress under `results/` when the report was written.
+`report/FIGURE_SOURCES.md` lists exactly which run produced each figure and
+what to regenerate once the `max_energy=500` run finishes.
 
 ## Installation
 
@@ -516,9 +560,9 @@ RL_FinalProject_40406934/
 
 ## Results Summary
 
-Full numbers, tables, and per-chart analysis live in `report/draft.html`
-(every claim there cites a specific CSV/figure under `results/`). Headline
-findings:
+Full numbers, tables, and per-chart analysis live in
+`report_derhami_40406934.pdf` (every claim there cites a specific
+CSV/figure). Headline findings:
 
 - **VI** solves the map perfectly at every tested γ (eval success **1.0**,
   ~38.75 steps); γ mostly rescales `V(start)`, not the greedy policy.
@@ -546,8 +590,8 @@ in the report and here come from CSVs/models actually produced by local runs
 under `results/`, not hand-typed. The full disclosure table with ≥2 flawed
 AI-suggestion examples (energy-budget myth, max-energy-only policy slicing,
 a reward-mode mismatch mis-diagnosed as an energy problem, RdYlGn
-colormap mash-up, generic "transfer was good" prose) is in `report/draft.html`
-§9 — reproduced in short form here:
+colormap mash-up, generic "transfer was good" prose) is in
+`report_derhami_40406934.pdf` — reproduced in short form here:
 
 | Use case | Flawed/incomplete AI suggestion | Student correction | Why |
 |----------|----------------------------------|---------------------|-----|
@@ -557,9 +601,7 @@ colormap mash-up, generic "transfer was good" prose) is in `report/draft.html`
 | GUI entry point | Left `main.py` printing "GUI not implemented" | Wired `main.py` (no `--algo`) to launch `gui.app.App` | The GUI was fully implemented; the CLI dispatcher just never called it |
 
 ## References
-
-- Sutton, R. S., & Barto, A. G. (2018). *Reinforcement Learning: An
-  Introduction* (2nd ed.). MIT Press. — Bellman backups (VI), Q-Learning,
+ 
   SARSA(λ) with eligibility traces, ε-greedy exploration.
 - Course lecture notes / assignment specification for this project
   (`tmp/final_project_text.md`) — state/action/reward design constraints,
