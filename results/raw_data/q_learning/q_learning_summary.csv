@@ -1,0 +1,13 @@
+reward_mode,schedule,seed,first_success_episode,episodes_to_90pct_success,final_train_success_rate,eval_success_rate,eval_mean_return,eval_mean_steps,visited_states
+sparse,linear,81150,9,19181,1.0,0.86,-93.52,198.68,210558
+sparse,linear,8565,6,18101,1.0,0.93,-39.94,172.06,206688
+sparse,linear,17944,13,18803,1.0,0.85,-66.5,183.16,204378
+sparse,exponential,81150,1474,17461,1.0,0.76,-187.7,243.16,168098
+sparse,exponential,8565,1,15829,1.0,0.89,-30.87,166.83,177421
+sparse,exponential,17944,2,18185,1.0,0.84,-82.81,200.19,166119
+shaped,linear,81150,9,1455,1.0,0.99,143.98,66.94,169216
+shaped,linear,8565,6,1413,1.0,0.99,131.27,77.41,165970
+shaped,linear,17944,13,1691,1.0,0.98,119.27,79.25,167404
+shaped,exponential,81150,262,503,1.0,0.83,-95.61,168.73,88712
+shaped,exponential,8565,1,515,1.0,0.98,86.47,95.71,92499
+shaped,exponential,17944,2,518,1.0,0.5,-502.5,336.5,91985

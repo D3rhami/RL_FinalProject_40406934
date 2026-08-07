@@ -2,3 +2,15 @@ timestamp,algorithm,variant_id,seed,status,runtime_seconds,error_message,output_
 2026-08-07 21:29:10,value_iteration,vi_sparse_gamma0.9,,success,687.02,,results/models/vi/vi_sparse_gamma0.9.json
 2026-08-07 21:46:06,value_iteration,vi_sparse_gamma0.95,,success,1016.227,,results/models/vi/vi_sparse_gamma0.95.json
 2026-08-07 22:00:50,value_iteration,vi_sparse_gamma0.99,,success,883.278,,results/models/vi/vi_sparse_gamma0.99.json
+2026-08-07 22:03:24,q_learning,q_learning_sparse_linear_seed81150,81150,success,153.832,,results/models/q_learning/q_learning_sparse_linear_seed81150.json
+2026-08-07 22:06:38,q_learning,q_learning_sparse_linear_seed8565,8565,success,193.84,,results/models/q_learning/q_learning_sparse_linear_seed8565.json
+2026-08-07 22:09:55,q_learning,q_learning_sparse_linear_seed17944,17944,success,197.364,,results/models/q_learning/q_learning_sparse_linear_seed17944.json
+2026-08-07 22:12:34,q_learning,q_learning_sparse_exponential_seed81150,81150,success,158.797,,results/models/q_learning/q_learning_sparse_exponential_seed81150.json
+2026-08-07 22:15:43,q_learning,q_learning_sparse_exponential_seed8565,8565,success,189.204,,results/models/q_learning/q_learning_sparse_exponential_seed8565.json
+2026-08-07 22:18:27,q_learning,q_learning_sparse_exponential_seed17944,17944,success,164.3,,results/models/q_learning/q_learning_sparse_exponential_seed17944.json
+2026-08-07 22:19:21,q_learning,q_learning_shaped_linear_seed81150,81150,success,54.015,,results/models/q_learning/q_learning_shaped_linear_seed81150.json
+2026-08-07 22:20:30,q_learning,q_learning_shaped_linear_seed8565,8565,success,68.658,,results/models/q_learning/q_learning_shaped_linear_seed8565.json
+2026-08-07 22:21:37,q_learning,q_learning_shaped_linear_seed17944,17944,success,66.577,,results/models/q_learning/q_learning_shaped_linear_seed17944.json
+2026-08-07 22:22:17,q_learning,q_learning_shaped_exponential_seed81150,81150,success,40.003,,results/models/q_learning/q_learning_shaped_exponential_seed81150.json
+2026-08-07 22:23:06,q_learning,q_learning_shaped_exponential_seed8565,8565,success,49.439,,results/models/q_learning/q_learning_shaped_exponential_seed8565.json
+2026-08-07 22:24:01,q_learning,q_learning_shaped_exponential_seed17944,17944,success,54.623,,results/models/q_learning/q_learning_shaped_exponential_seed17944.json
