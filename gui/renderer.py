@@ -45,6 +45,8 @@ class MazeRenderer:
         self.trail_ids = []
         self.agent_ids = []
         self.banner_ids = []
+        self.overlay_ids = []
+        self.toast_ids = []
         self.grid = None
         self.size = 0
         self.cell_px = 24
@@ -62,6 +64,8 @@ class MazeRenderer:
         self.trail_ids.clear()
         self.agent_ids.clear()
         self.banner_ids.clear()
+        self.overlay_ids.clear()
+        self.toast_ids.clear()
         self.trail.clear()
 
     def _cell_box(self, r, c, inset=0):
@@ -225,21 +229,80 @@ class MazeRenderer:
         for iid in self.agent_ids:
             self.canvas.tag_raise(iid)
 
-    def show_banner(self, text, tone='ok'):
-        for iid in self.banner_ids:
+    def clear_overlay(self):
+        for iid in self.overlay_ids:
             try:
                 self.canvas.delete(iid)
             except tk.TclError:
                 pass
-        self.banner_ids.clear()
-        fill = '#14532D' if tone == 'ok' else '#7F1D1D'
-        accent = '#86EFAC' if tone == 'ok' else '#FECACA'
-        x1, y1 = self.pad_x + 10, self.pad_y + 10
-        bg = self.canvas.create_rectangle(
-            x1, y1, x1 + 240, y1 + 36, fill=fill, outline=accent, width=2)
-        tx = self.canvas.create_text(
-            x1 + 14, y1 + 18, anchor='w', fill='#FFFFFF',
-            text=text.upper(), font=('Segoe UI', 12, 'bold'))
-        self.banner_ids = [bg, tx]
-        for iid in self.banner_ids:
+        self.overlay_ids.clear()
+
+    def show_overlay(self, icon, title, subtitle, bg='#14532D', border='#86EFAC', fg='#FFFFFF'):
+        self.clear_overlay()
+        if self.size == 0:
+            return
+        board = self.cell_px * self.size
+        cx = self.pad_x + board / 2
+        cy = self.pad_y + board / 2
+        w = min(340, max(220, board * 0.72))
+        h = 160
+        x1, y1, x2, y2 = cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2
+
+        shade = self.canvas.create_rectangle(
+            self.pad_x - 10, self.pad_y - 10,
+            self.pad_x + board + 10, self.pad_y + board + 10,
+            fill='#000000', outline='', stipple='gray50')
+        card_shadow = self.canvas.create_rectangle(
+            x1 + 4, y1 + 6, x2 + 4, y2 + 6, fill='#000000', outline='')
+        card = self.canvas.create_rectangle(
+            x1, y1, x2, y2, fill=bg, outline=border, width=3)
+        icon_id = self.canvas.create_text(
+            cx, y1 + 36, text=icon, font=('Segoe UI Emoji', 26))
+        title_id = self.canvas.create_text(
+            cx, y1 + 80, text=title, fill=fg, font=('Segoe UI', 16, 'bold'))
+        sub_id = self.canvas.create_text(
+            cx, y1 + 110, text=subtitle, fill=fg, font=('Segoe UI', 10),
+            width=int(w - 30))
+        hint_id = self.canvas.create_text(
+            cx, y2 - 16, text='Press Start or Reset to continue', fill=fg,
+            font=('Segoe UI', 9, 'italic'))
+        self.overlay_ids = [shade, card_shadow, card, icon_id, title_id, sub_id, hint_id]
+        for iid in self.overlay_ids:
             self.canvas.tag_raise(iid)
+
+    def clear_toast(self):
+        for iid in self.toast_ids:
+            try:
+                self.canvas.delete(iid)
+            except tk.TclError:
+                pass
+        self.toast_ids.clear()
+
+    def show_toast(self, text, bg='#7C5E10', fg='#FFF3C4', ms=1500, app=None):
+        self.clear_toast()
+        if self.size == 0:
+            return
+        board = self.cell_px * self.size
+        cx = self.pad_x + board / 2
+        y = self.pad_y + 22
+        w = max(140, 18 * len(text))
+        bg_id = self.canvas.create_rectangle(
+            cx - w / 2, y - 16, cx + w / 2, y + 16, fill=bg, outline='#FFFFFF', width=1)
+        txt_id = self.canvas.create_text(
+            cx, y, text=text, fill=fg, font=('Segoe UI', 11, 'bold'))
+        ids = [bg_id, txt_id]
+        self.toast_ids = ids
+        for iid in ids:
+            self.canvas.tag_raise(iid)
+
+        def _fade():
+            for iid in ids:
+                try:
+                    self.canvas.delete(iid)
+                except tk.TclError:
+                    pass
+            if self.toast_ids == ids:
+                self.toast_ids = []
+
+        if app is not None:
+            app.after(ms, _fade)
