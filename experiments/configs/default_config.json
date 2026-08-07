@@ -44,7 +44,7 @@
     "epsilon_min": 0.01,
     "linear_decay_episodes": 5000,
     "exponential_decay_rate": 0.995,
-    "num_episodes": 50000
+    "num_episodes": 20000
   },
 
   "sarsa_lambda": {
@@ -53,7 +53,7 @@
     "epsilon_start": 1.0,
     "epsilon_min": 0.01,
     "exponential_decay_rate": 0.995,
-    "num_episodes": 50000,
+    "num_episodes": 20000,
     "lambda_sweep": [0.0, 0.3, 0.7, 0.9],
     "trace_type": "replacing"
   },

@@ -213,7 +213,7 @@ From `experiments/configs/default_config.json` (also shown in the header above):
 
 Training episode counts in the same config:
 
-- Q-Learning / SARSA(λ): **50,000** episodes (`q_learning.num_episodes`, `sarsa_lambda.num_episodes`)
+- Q-Learning / SARSA(λ): **20,000** episodes (`q_learning.num_episodes`, `sarsa_lambda.num_episodes`)
 - Transfer: **shaped** reward, **5,000** episodes (`transfer.reward_mode`, `transfer.num_episodes`)
 
 ## Running the Project
@@ -250,7 +250,7 @@ Aliases accepted: `vi` / `value_iteration`, `q_learning`, `sarsa` / `sarsa_lambd
 Optional flags: `--config PATH`, `--dry-run` (short episodes for smoke tests),
 `--fresh` (clear `results/raw_data/run_ledger.csv` before starting).
 
-QL/SARSA train for **50,000** episodes; transfer uses **shaped** reward and
+QL/SARSA train for **20,000** episodes; transfer uses **shaped** reward and
 **5,000** episodes (see Config identity).
 
 ### Figures
@@ -431,8 +431,9 @@ find that policy in the first place.
 | **500**      | 324,648  | **12.9×**                     | **0.86**              | **0.71**                      |
 
 (60's row used the earlier 6,000-episode probe; 100–500 used the 20,000-episode
-probe — both far shorter than the real 50,000-episode training budget, so
-these are relative learnability signals, not final performance numbers.)
+probe, which now matches the real training budget (see "20k vs 50k episodes"
+note below) — these are still relative learnability signals from a
+single-seed run, not the final multi-seed numbers.)
 
 **Trade-off, stated honestly.** Raising the budget helps model-free learners
 in two ways: fewer early rollouts die before finding any reward signal, and
@@ -451,12 +452,12 @@ optimum.
 model-free learnability signal in the probe (QL 0.86 / SARSA 0.71, both the
 best of the candidates tested) and the project prioritizes giving Q-Learning,
 SARSA(λ), and the transfer-learning scenarios a realistic chance to reach
-non-trivial success rates within the actual 50,000-episode training budget —
-over keeping the energy constraint as tight as mathematically possible. The
-full 50k-episode retraining under this budget (VI + QL + SARSA + transfer;
+non-trivial success rates within the actual training budget — over keeping
+the energy constraint as tight as mathematically possible. The full
+multi-seed retraining under this budget (VI + QL + SARSA + transfer;
 `experiments/run_experiments.py --fresh`) is the real confirmation of this
 choice; the probe above is a fast (~15 minutes total) way to search the space
-before committing to the ~90-minute full rerun. `max_energy` and its sweep
+before committing to the full rerun. `max_energy` and its sweep
 candidates live in `experiments/configs/default_config.json` → `env`.
 
 ### Cleanliness / reproducibility note
