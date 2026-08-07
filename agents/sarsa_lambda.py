@@ -1,4 +1,5 @@
 import numpy as np
+from tqdm import tqdm
 
 
 class SarsaLambdaAgent:
@@ -68,10 +69,15 @@ class SarsaLambdaAgent:
         return delta
 
     def train(self, logger=None, keep_detail_episodes=None,
-              step_callback=None, trace_episodes=None, trace_dump_callback=None):
+              step_callback=None, trace_episodes=None, trace_dump_callback=None,
+              progress_bar=False, progress_desc=None):
         keep_detail_episodes = keep_detail_episodes or set()
         trace_episodes = trace_episodes or set()
-        for ep in range(self.num_episodes):
+        episode_iter = tqdm(
+            range(self.num_episodes), disable=not progress_bar,
+            desc=progress_desc or f'SARSA(lambda={self.lam})', unit='ep', leave=False,
+        )
+        for ep in episode_iter:
             epsilon = self.epsilon_at(ep)
             E = {}
             state = self.env.reset()
@@ -107,6 +113,10 @@ class SarsaLambdaAgent:
                     break
                 state, action = s_next, a_next
                 step_idx += 1
-            if logger:
-                logger.end_episode()
+            row = logger.end_episode() if logger else None
+            if progress_bar and row is not None:
+                episode_iter.set_postfix(
+                    eps=f'{epsilon:.3f}', success=int(row['success']),
+                    steps=row['steps'], refresh=False,
+                )
         return self.Q

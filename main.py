@@ -19,7 +19,8 @@ def run_value_iteration(env, cfg, args):
     theta = cfg['value_iteration']['theta']
     vi = ValueIteration(env, gamma=gamma, theta=theta, reward_mode=args.reward_mode)
     t0 = time.time()
-    V, n_iter, converged, history = vi.run(max_iterations=args.max_iterations)
+    V, n_iter, converged, history = vi.run(
+        max_iterations=args.max_iterations, progress_bar=args.bar)
     policy = vi.extract_policy(V)
     states = env.all_states()
     runtime = time.time() - t0
@@ -57,7 +58,7 @@ def run_q_learning(env, cfg, args):
     out_dir = Path('results/raw_data/q_learning')
     out_dir.mkdir(parents=True, exist_ok=True)
     logger = EpisodeLogger(str(out_dir / f'q_learning_{decay_type}_cli_summary.csv'))
-    agent.train(logger=logger)
+    agent.train(logger=logger, progress_bar=args.bar, progress_desc='Q-Learning episodes')
     logger.flush_summary()
 
     states = env.all_states()
@@ -97,7 +98,8 @@ def run_sarsa_lambda(env, cfg, args):
     out_dir = Path('results/raw_data/sarsa')
     out_dir.mkdir(parents=True, exist_ok=True)
     logger = EpisodeLogger(str(out_dir / f'sarsa_lambda_{lam}_cli_summary.csv'))
-    agent.train(logger=logger)
+    agent.train(logger=logger, progress_bar=args.bar,
+                progress_desc=f'SARSA(lambda={lam}) episodes')
     logger.flush_summary()
 
     states = env.all_states()
@@ -134,6 +136,9 @@ def main():
     parser.add_argument('--lam', type=float, default=None)
     parser.add_argument('--num-episodes', dest='num_episodes', type=int, default=None)
     parser.add_argument('--seed', type=int, default=None)
+    parser.add_argument('--bar', '--progress', dest='bar', action='store_true',
+                         help='Show a tqdm progress bar while training/iterating '
+                              '(off by default)')
     args = parser.parse_args()
 
     if args.algo is None:

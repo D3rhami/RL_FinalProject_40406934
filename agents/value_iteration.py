@@ -1,5 +1,6 @@
 import time
 import numpy as np
+from tqdm import tqdm
 
 
 class ValueIteration:
@@ -20,7 +21,8 @@ class ValueIteration:
             q += p * (r + self.gamma * V[self.env.encode_state(ns)])
         return q
 
-    def run(self, max_iterations: int = 1000):
+    def run(self, max_iterations: int = 1000, progress_bar: bool = False,
+            progress_desc: str = None):
         n = self.env.n_states
         V = np.zeros(n)
         history = []
@@ -28,7 +30,11 @@ class ValueIteration:
         converged = False
         n_iter = 0
 
-        for it in range(max_iterations):
+        iteration_iter = tqdm(
+            range(max_iterations), disable=not progress_bar,
+            desc=progress_desc or f'VI (gamma={self.gamma})', unit='iter', leave=False,
+        )
+        for it in iteration_iter:
             V_new = V.copy()
             for s in self.states:
                 idx = self.env.encode_state(s)
@@ -40,8 +46,11 @@ class ValueIteration:
             V = V_new
             history.append(delta)
             n_iter = it + 1
+            if progress_bar:
+                iteration_iter.set_postfix(delta=f'{delta:.2e}', refresh=False)
             if delta < self.theta:
                 converged = True
+                iteration_iter.close()
                 break
 
         self.V = V

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -121,6 +122,7 @@ def _scenario_specs(tcfg):
 def run_transfer_experiments(cfg):
     print('=== Transfer Learning (Q-Learning) ===')
     tcfg = cfg['transfer']
+    show_progress = cfg.get('_show_progress', False)
     ensure_target_maps(cfg)
     seeds, eval_seed = derive_seeds(cfg['base_seed'], n=cfg['experiment_grid']['n_seeds'])
     source_model_path, best_row = pick_best_shaped_ql_model(cfg)
@@ -135,14 +137,28 @@ def run_transfer_experiments(cfg):
     Path('results/models/transfer').mkdir(parents=True, exist_ok=True)
     Path('results/raw_data/transfer').mkdir(parents=True, exist_ok=True)
 
+    all_variants = []
     for target_name, map_path in targets:
-        target_env_probe = MazeEnv(map_path, config=cfg, reward_mode=tcfg['reward_mode'])
-        unchanged = unchanged_state_indices(source_env, target_env_probe)
-        print(f"  {target_name}: unchanged state indices={len(unchanged)}")
-
         for scenario_id, scenario, beta in _scenario_specs(tcfg):
             for seed in seeds:
+                all_variants.append((target_name, map_path, scenario_id, scenario, beta, seed))
+    print(f"  {len(all_variants)} variant(s) to run "
+          f"({len(targets)} target(s) x {len(_scenario_specs(tcfg))} scenario(s) x "
+          f"{len(seeds)} seed(s)), {tcfg['num_episodes']} episodes each")
+
+    unchanged_by_target = {}
+    for target_name, map_path in targets:
+        target_env_probe = MazeEnv(map_path, config=cfg, reward_mode=tcfg['reward_mode'])
+        unchanged_by_target[target_name] = unchanged_state_indices(source_env, target_env_probe)
+        print(f"  {target_name}: unchanged state indices={len(unchanged_by_target[target_name])}")
+
+    variant_iter = tqdm(all_variants, disable=not show_progress,
+                         desc='Transfer variants', unit='variant')
+    for target_name, map_path, scenario_id, scenario, beta, seed in variant_iter:
+                unchanged = unchanged_by_target[target_name]
                 variant_id = f'transfer_{target_name}_{scenario_id}_seed{seed}'
+                if show_progress:
+                    variant_iter.set_description(f'Transfer variants ({variant_id})')
                 t0 = time.time()
                 try:
                     env = MazeEnv(map_path, config=cfg,
@@ -162,7 +178,8 @@ def run_transfer_experiments(cfg):
                     )
                     logger = EpisodeLogger(
                         f'results/raw_data/transfer/_tmp_{variant_id}.csv')
-                    agent.train(logger=logger)
+                    agent.train(logger=logger, progress_bar=show_progress,
+                                progress_desc=f'  {variant_id} episodes')
 
                     per_success, per_return = [], []
                     for row in logger.summary_rows:
@@ -259,6 +276,7 @@ def run_transfer_experiments(cfg):
 def run_negative_transfer_case(cfg, source_Q=None, source_model_path=None):
     print('=== Negative-transfer case study (different target) ===')
     tcfg = cfg['transfer']
+    show_progress = cfg.get('_show_progress', False)
     ensure_target_maps(cfg)
     if source_Q is None or source_model_path is None:
         source_model_path, _ = pick_best_shaped_ql_model(cfg)
@@ -335,7 +353,11 @@ def run_negative_transfer_case(cfg, source_Q=None, source_model_path=None):
 
     snap_rows = []
     next_cp = 0
-    for ep in range(tcfg['num_episodes'] + 1):
+    negative_case_iter = tqdm(
+        range(tcfg['num_episodes'] + 1), disable=not show_progress,
+        desc='  negative-transfer case episodes', unit='ep', leave=False,
+    )
+    for ep in negative_case_iter:
         if next_cp < len(checkpoints) and ep == checkpoints[next_cp]:
             q = agent.Q[case_idx].tolist()
             snap_rows.append({

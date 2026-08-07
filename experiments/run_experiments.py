@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -91,15 +92,24 @@ def run_value_iteration(cfg):
     reward_mode = grid_cfg['reward_mode']
     _, eval_seed = derive_seeds(cfg['base_seed'], n=cfg['experiment_grid']['n_seeds'])
     rows = []
+    show_progress = cfg.get('_show_progress', False)
 
-    for gamma in grid_cfg['gammas']:
+    gammas = grid_cfg['gammas']
+    print(f"  {len(gammas)} gamma variant(s) to run: {gammas}")
+    gamma_iter = tqdm(gammas, disable=not show_progress,
+                       desc='VI variants', unit='variant')
+    for gamma in gamma_iter:
         variant_id = f"vi_{reward_mode}_gamma{gamma}"
+        if show_progress:
+            gamma_iter.set_description(f'VI variants ({variant_id})')
         t0 = time.time()
         try:
             env = MazeEnv(MAP_PATH, config=cfg, reward_mode=reward_mode)
             vi = ValueIteration(env, gamma=gamma, theta=vi_cfg['theta'],
                                  reward_mode=reward_mode)
-            V, n_iter, converged, history = vi.run(max_iterations=2000)
+            V, n_iter, converged, history = vi.run(
+                max_iterations=2000, progress_bar=show_progress,
+                progress_desc=f'VI gamma={gamma} (iterations)')
             policy = vi.extract_policy(V)
             states = env.all_states()
 
@@ -166,13 +176,22 @@ def run_q_learning(cfg):
     seeds, eval_seed = derive_seeds(cfg['base_seed'], n=grid['n_seeds'])
     trace_cfg = qg['trace_run']
     trace_seed = seeds[0]
+    show_progress = cfg.get('_show_progress', False)
 
     training_rows, summary_rows = [], []
 
-    for reward_mode in qg['reward_modes']:
-        for schedule in qg['schedules']:
-            for seed in seeds:
+    variants = [(rm, sch, sd) for rm in qg['reward_modes']
+                for sch in qg['schedules'] for sd in seeds]
+    print(f"  {len(variants)} variant(s) to run "
+          f"({len(qg['reward_modes'])} reward mode(s) x "
+          f"{len(qg['schedules'])} schedule(s) x {len(seeds)} seed(s)), "
+          f"{qcfg['num_episodes']} episodes each")
+    variant_iter = tqdm(variants, disable=not show_progress,
+                         desc='Q-Learning variants', unit='variant')
+    for reward_mode, schedule, seed in variant_iter:
                 variant_id = f"q_learning_{reward_mode}_{schedule}_seed{seed}"
+                if show_progress:
+                    variant_iter.set_description(f'Q-Learning variants ({variant_id})')
                 t0 = time.time()
                 try:
                     env = MazeEnv(MAP_PATH, config=cfg, reward_mode=reward_mode, seed=seed)
@@ -216,6 +235,8 @@ def run_q_learning(cfg):
                         logger=logger,
                         step_callback=step_cb if is_trace else None,
                         trace_episodes={trace_cfg['episode_index']} if is_trace else None,
+                        progress_bar=show_progress,
+                        progress_desc=f'  {variant_id} episodes',
                     )
 
                     per_episode_success, per_episode_return = [], []
@@ -318,13 +339,22 @@ def run_sarsa_lambda(cfg):
     seeds, eval_seed = derive_seeds(cfg['base_seed'], n=grid['n_seeds'])
     trace_cfg = sg['trace_run']
     trace_seed = seeds[0]
+    show_progress = cfg.get('_show_progress', False)
 
     training_rows, summary_rows = [], []
 
-    for reward_mode in sg['reward_modes']:
-      for lam in sg['lambdas']:
-        for seed in seeds:
+    variants = [(rm, lam, sd) for rm in sg['reward_modes']
+                for lam in sg['lambdas'] for sd in seeds]
+    print(f"  {len(variants)} variant(s) to run "
+          f"({len(sg['reward_modes'])} reward mode(s) x "
+          f"{len(sg['lambdas'])} lambda(s) x {len(seeds)} seed(s)), "
+          f"{scfg['num_episodes']} episodes each")
+    variant_iter = tqdm(variants, disable=not show_progress,
+                         desc='SARSA(lambda) variants', unit='variant')
+    for reward_mode, lam, seed in variant_iter:
             variant_id = f"sarsa_{reward_mode}_lambda{lam}_seed{seed}"
+            if show_progress:
+                variant_iter.set_description(f'SARSA(lambda) variants ({variant_id})')
             t0 = time.time()
             try:
                 env = MazeEnv(MAP_PATH, config=cfg, reward_mode=reward_mode, seed=seed)
@@ -372,6 +402,8 @@ def run_sarsa_lambda(cfg):
                     step_callback=step_cb if is_trace else None,
                     trace_episodes={trace_cfg['episode_index']} if is_trace else None,
                     trace_dump_callback=dump_cb if is_trace else None,
+                    progress_bar=show_progress,
+                    progress_desc=f'  {variant_id} episodes',
                 )
 
                 per_episode_success, per_episode_return = [], []
@@ -504,8 +536,14 @@ def main():
     if fresh:
         args = [a for a in args if a != '--fresh']
 
+    show_progress = ('--bar' in args) or ('--progress' in args)
+    args = [a for a in args if a not in ('--bar', '--progress')]
+
     requested = args
     cfg = load_config(config_path)
+    cfg['_show_progress'] = show_progress
+    if show_progress:
+        print("[--bar] Progress bars enabled (tqdm) for every algorithm/variant/episode loop.")
 
     if dry_run:
         cfg['q_learning']['num_episodes'] = 50
@@ -540,10 +578,20 @@ def main():
                 to_run.append(fn)
                 seen.add(fn)
 
+    algo_names = [fn.__name__.replace('run_', '') for fn in to_run]
+    print(f"Algorithms queued: {algo_names}")
+
     t_start = time.time()
-    for fn in to_run:
+    algo_iter = tqdm(list(zip(to_run, algo_names)), disable=not show_progress,
+                      desc='Overall progress', unit='algo', position=0)
+    for fn, name in algo_iter:
+        if show_progress:
+            algo_iter.set_description(f'Overall progress ({name})')
+        t_algo = time.time()
+        print(f"\n--- Starting {name} ---")
         fn(cfg)
         _flush_ledger()
+        print(f"--- Finished {name} in {time.time() - t_algo:.1f}s ---")
 
     print(f"\nTotal runtime: {time.time() - t_start:.1f}s")
     print(f"Run ledger: {LEDGER_PATH}")
