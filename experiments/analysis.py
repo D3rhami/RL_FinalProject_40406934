@@ -169,8 +169,8 @@ def plot_ql_rewardmode_comparison(training_csv, out_path, schedule='exponential'
 
 
 def plot_sarsa_lambda_comparison(training_csv, summary_csv, out_path):
-    df = pd.read_csv(training_csv)
-    summary = pd.read_csv(summary_csv)
+    df = training_csv if isinstance(training_csv, pd.DataFrame) else pd.read_csv(training_csv)
+    summary = summary_csv if isinstance(summary_csv, pd.DataFrame) else pd.read_csv(summary_csv)
     colors = ['#2a78d6', '#1baf7a', '#eda100', '#e34948']
     lambdas = sorted(df['lambda'].unique())
     color_map = {lam: colors[i % len(colors)] for i, lam in enumerate(lambdas)}
@@ -225,6 +225,27 @@ def plot_sarsa_lambda_comparison(training_csv, summary_csv, out_path):
     axes[2].set_ylim(0, y_top)
     axes[2].grid(alpha=0.3, axis='y')
 
+    plt.tight_layout()
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path, dpi=200, bbox_inches='tight')
+    plt.close(fig)
+    print(f'saved {out_path}')
+
+
+def plot_sarsa_rewardmode_comparison(training_csv, out_path, lam=0.3):
+    df = pd.read_csv(training_csv)
+    df = df[df['lambda'] == lam]
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    for reward_mode, (mean, std) in _rolling_with_band(df, 'reward_mode', 'return').items():
+        xs = np.arange(len(mean))
+        axes[0].plot(xs, mean, label=reward_mode); axes[0].fill_between(xs, mean - std, mean + std, alpha=0.18)
+    for reward_mode, (mean, std) in _rolling_with_band(df, 'reward_mode', 'steps').items():
+        xs = np.arange(len(mean))
+        axes[1].plot(xs, mean, label=reward_mode); axes[1].fill_between(xs, mean - std, mean + std, alpha=0.18)
+    axes[0].set_title(f'Reward curve (lambda={lam}), mean +/- std across seeds')
+    axes[0].set_xlabel('episode'); axes[0].set_ylabel('return'); axes[0].legend(); axes[0].grid(alpha=0.3)
+    axes[1].set_title(f'Step count (lambda={lam})')
+    axes[1].set_xlabel('episode'); axes[1].set_ylabel('steps'); axes[1].legend(); axes[1].grid(alpha=0.3)
     plt.tight_layout()
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_path, dpi=200, bbox_inches='tight')
@@ -349,14 +370,33 @@ def plot_negative_transfer(checkpoint_csv, out_path):
     print(f'saved {out_path}')
 
 
-def plot_final_path(model_path, map_path, out_path, cfg=None, max_steps=500):
-    from environments.maze import MazeEnv, CellType
-    cfg = cfg or load_config()
-    model = _load_json(model_path)
-    Q = {tuple(s): np.array(q) for s, q in zip(model['states'], model['Q'])}
-    env = MazeEnv(map_path, config=cfg, reward_mode='sparse', seed=cfg['base_seed'])
+def _maze_cell_colors():
+    from environments.maze import CellType
+    return {
+        CellType.WALL: '#2D2D2D', CellType.EMPTY: '#FFFFFF', CellType.PENALTY: '#FF6464',
+        CellType.START: '#64C864', CellType.KEY: '#FFD700', CellType.DOOR: '#8B5A2B',
+        CellType.GOAL: '#00C800',
+    }
+
+
+def _draw_maze_cells(ax, env):
+    from environments.maze import CellType
+    colors = _maze_cell_colors()
+    for r in range(env.maze_size):
+        for c in range(env.maze_size):
+            ct = CellType(int(env.grid[r, c]))
+            ax.add_patch(plt.Rectangle((c - 0.5, r - 0.5), 1, 1,
+                                       facecolor=colors[ct], edgecolor='#B0B0B0', lw=0.3))
+    ax.set_xlim(-0.5, env.maze_size - 0.5)
+    ax.set_ylim(env.maze_size - 0.5, -0.5)
+    ax.set_aspect('equal')
+    ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+
+
+def _rollout_greedy_path(env, Q, max_steps=500):
     state = env.reset()
     path = [state[:2]]
+    info = {}
     for _ in range(max_steps):
         q = Q.get(state)
         a = int(np.argmax(q)) if q is not None else 0
@@ -364,27 +404,67 @@ def plot_final_path(model_path, map_path, out_path, cfg=None, max_steps=500):
         path.append(state[:2])
         if done:
             break
-    colors = {
-        CellType.WALL: '#2D2D2D', CellType.EMPTY: '#FFFFFF', CellType.PENALTY: '#FF6464',
-        CellType.START: '#64C864', CellType.KEY: '#FFD700', CellType.DOOR: '#8B5A2B',
-        CellType.GOAL: '#00C800',
-    }
+    return path, info
+
+
+def plot_final_path(model_path, map_path, out_path, cfg=None, max_steps=500):
+    from environments.maze import MazeEnv
+    cfg = cfg or load_config()
+    model = _load_json(model_path)
+    Q = {tuple(s): np.array(q) for s, q in zip(model['states'], model['Q'])}
+    env = MazeEnv(map_path, config=cfg, reward_mode='sparse', seed=cfg['base_seed'])
+    path, info = _rollout_greedy_path(env, Q, max_steps)
     fig, ax = plt.subplots(figsize=(8, 8), facecolor='white')
-    for r in range(env.maze_size):
-        for c in range(env.maze_size):
-            ct = CellType(int(env.grid[r, c]))
-            ax.add_patch(plt.Rectangle((c - 0.5, r - 0.5), 1, 1,
-                                       facecolor=colors[ct], edgecolor='#B0B0B0', lw=0.3))
+    _draw_maze_cells(ax, env)
     ys = [p[0] for p in path]
     xs = [p[1] for p in path]
     ax.plot(xs, ys, color='#0064FF', linewidth=2.2, marker='o', markersize=3)
-    ax.set_xlim(-0.5, env.maze_size - 0.5)
-    ax.set_ylim(env.maze_size - 0.5, -0.5)
-    ax.set_aspect('equal')
     ax.set_title(f'Greedy path ({len(path)-1} steps) — {Path(model_path).name}\n'
                  f'term={info.get("termination_reason")}')
-    ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path, dpi=200, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+    print(f'saved {out_path}')
+
+
+def plot_transfer_maze_comparison(source_model_path, target_model_path,
+                                   source_map_path, target_map_path,
+                                   out_path, cfg=None, max_steps=500,
+                                   target_label='target'):
+    """Side-by-side view for transfer learning: the SOURCE maze with the
+    source-trained agent's greedy path on the left, and the TARGET maze
+    (similar/different) with the transferred-then-trained agent's greedy
+    path on the right — so the two maze layouts (and how the agent adapts
+    to what changed between them) can be seen together in one figure."""
+    from environments.maze import MazeEnv
+    cfg = cfg or load_config()
+    src_model = _load_json(source_model_path)
+    tgt_model = _load_json(target_model_path)
+    src_Q = {tuple(s): np.array(q) for s, q in zip(src_model['states'], src_model['Q'])}
+    tgt_Q = {tuple(s): np.array(q) for s, q in zip(tgt_model['states'], tgt_model['Q'])}
+
+    src_env = MazeEnv(source_map_path, config=cfg, reward_mode='sparse', seed=cfg['base_seed'])
+    tgt_env = MazeEnv(target_map_path, config=cfg, reward_mode='sparse', seed=cfg['base_seed'])
+
+    src_path, src_info = _rollout_greedy_path(src_env, src_Q, max_steps)
+    tgt_path, tgt_info = _rollout_greedy_path(tgt_env, tgt_Q, max_steps)
+
+    fig, axes = plt.subplots(1, 2, figsize=(15, 7.5), facecolor='white')
+    panels = (
+        (axes[0], src_env, src_path, src_info, 'Source maze (Q-Learning)'),
+        (axes[1], tgt_env, tgt_path, tgt_info,
+         f'{target_label.capitalize()} target maze (transferred Q-Learning: {tgt_model.get("scenario", "?")})'),
+    )
+    for ax, env, path, info, title in panels:
+        _draw_maze_cells(ax, env)
+        ys = [p[0] for p in path]
+        xs = [p[1] for p in path]
+        ax.plot(xs, ys, color='#0064FF', linewidth=2.2, marker='o', markersize=3)
+        ax.set_title(f'{title}\n{len(path) - 1} steps, term={info.get("termination_reason")}',
+                     fontsize=10)
+    fig.suptitle('Transfer learning: source maze vs. target maze after transfer', fontsize=13)
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
     plt.savefig(out_path, dpi=200, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     print(f'saved {out_path}')
@@ -488,20 +568,30 @@ def main():
             plot_final_path(ql_best_model, 'environments/maps/source_maze.json',
                             'results/figures/misc/final_path.png', cfg=cfg)
 
+    sarsa_ref_rm = grid['sarsa_lambda']['reference_reward_mode']
     sarsa_training = Path('results/raw_data/sarsa/sarsa_training.csv')
     sarsa_summary_path = Path('results/raw_data/sarsa/sarsa_summary.csv')
     if sarsa_training.exists() and sarsa_summary_path.exists():
-        plot_sarsa_lambda_comparison(sarsa_training, sarsa_summary_path, 'results/figures/sarsa/sarsa_lambda_comparison.png')
+        sarsa_training_df = pd.read_csv(sarsa_training)
+        sarsa_summary_df = pd.read_csv(sarsa_summary_path)
+        # Lambda-sweep figure is scoped to one reward mode so lambda's effect
+        # isn't confounded with the (much larger) sparse-vs-shaped effect.
+        ref_training = sarsa_training_df[sarsa_training_df['reward_mode'] == sarsa_ref_rm]
+        ref_summary = sarsa_summary_df[sarsa_summary_df['reward_mode'] == sarsa_ref_rm]
+        plot_sarsa_lambda_comparison(ref_training, ref_summary, 'results/figures/sarsa/sarsa_lambda_comparison.png')
+        if 'shaped' in sarsa_training_df['reward_mode'].unique():
+            plot_sarsa_rewardmode_comparison(
+                sarsa_training, 'results/figures/sarsa/sarsa_rewardmode_comparison.png', lam=0.3)
     else:
         print(f'skip SARSA figure: {sarsa_training} or {sarsa_summary_path} not found')
 
     if sarsa_summary_path.exists():
         best_s = pd.read_csv(sarsa_summary_path).sort_values('eval_success_rate', ascending=False).iloc[0]
-        rm = grid['sarsa_lambda']['reward_mode']
+        rm = best_s['reward_mode']
         sarsa_best_model = Path(f"results/models/sarsa/sarsa_{rm}_lambda{best_s['lambda']}_seed{int(best_s['seed'])}.json")
         if sarsa_best_model.exists():
             plot_visit_map(sarsa_best_model, 'results/figures/sarsa/sarsa_visit_map.png',
-                           cfg['maze_size'], f"SARSA visitation (lambda={best_s['lambda']})")
+                           cfg['maze_size'], f"SARSA visitation ({rm}, lambda={best_s['lambda']})")
 
     step_trace = Path('results/raw_data/sarsa/sarsa_step_trace.csv')
     trace_dump = Path('results/raw_data/sarsa/sarsa_trace_dump.csv')
@@ -528,6 +618,15 @@ def main():
     if src_ql.exists() and aft.exists():
         plot_transfer_q_diff(src_ql, aft, 'environments/maps/target_different.json',
                              'results/figures/transfer/transfer_q_diff.png', cfg=cfg)
+
+    for target_label, target_map in (('similar', 'environments/maps/target_similar.json'),
+                                      ('different', 'environments/maps/target_different.json')):
+        tgt_model = Path(f'results/models/transfer/transfer_{target_label}_full_seed81150.json')
+        if src_ql.exists() and tgt_model.exists():
+            plot_transfer_maze_comparison(
+                src_ql, tgt_model, 'environments/maps/source_maze.json', target_map,
+                f'results/figures/transfer/transfer_maze_{target_label}.png',
+                cfg=cfg, target_label=target_label)
 
     check_required_visuals()
 

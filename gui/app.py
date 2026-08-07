@@ -82,6 +82,7 @@ class App(ctk.CTk):
         self.mode = 'eval'
         self.algo = 'Q-Learning'
         self.map_kind = 'source'
+        self.transfer_scenario = 'full'
         self.delay_ms = 100
         self.episode_steps = []
         self.frame_i = 0
@@ -157,6 +158,25 @@ class App(ctk.CTk):
         self.maze_canvas = tk.Canvas(
             self.maze_frame, bg='#0F1218', highlightthickness=0, bd=0)
         self.maze_canvas.pack(fill='both', expand=True, padx=10, pady=10)
+
+        # Small, deliberately unobtrusive corner control for the transfer-
+        # learning target map (source/similar/different) — this is a
+        # secondary/advanced option, not a primary control, so it lives
+        # tucked in the corner of the maze view rather than in CONTROLS.
+        self.env_corner = ctk.CTkFrame(
+            self.maze_frame, fg_color='#0F1218', corner_radius=8,
+            border_width=1, border_color=BORDER)
+        self.env_corner.place(relx=1.0, rely=1.0, anchor='se', x=-14, y=-14)
+        self._label(self.env_corner, 'target env', muted=True, size=9).grid(
+            row=0, column=0, sticky='w', padx=7, pady=(4, 0))
+        self.env_menu = ctk.CTkOptionMenu(
+            self.env_corner, values=['source', 'similar', 'different'],
+            command=self._on_env, width=92, height=22,
+            fg_color='#1F2937', button_color='#374151', button_hover_color='#4B5563',
+            text_color=MUTED, dropdown_fg_color='#1F2937',
+            font=ctk.CTkFont(size=10))
+        self.env_menu.set('source')
+        self.env_menu.grid(row=1, column=0, padx=7, pady=(2, 6))
 
         self.info_frame = self._card(top)
         self.info_frame.grid(row=0, column=1, sticky='nsew')
@@ -251,12 +271,22 @@ class App(ctk.CTk):
         self.algo_seg = self._seg(f, ['VI', 'Q-Learning', 'SARSA(L)'], self._on_algo, 'Q-Learning')
         self.algo_seg.grid(row=1, column=1, columnspan=2, sticky='ew', padx=4, pady=4)
 
-        self._label(f, 'Map', muted=True, size=11).grid(row=1, column=3, sticky='w', padx=8)
-        self.env_seg = self._seg(f, ['source', 'similar', 'different'], self._on_env, 'source')
-        self.env_seg.grid(row=1, column=4, columnspan=2, sticky='ew', padx=4, pady=4)
-
+        self._label(f, 'Mode', muted=True, size=11).grid(row=1, column=3, sticky='w', padx=8)
         self.mode_seg = self._seg(f, ['train', 'eval'], self._on_mode, 'eval')
-        self.mode_seg.grid(row=1, column=6, columnspan=2, sticky='ew', padx=4, pady=4)
+        self.mode_seg.grid(row=1, column=4, columnspan=2, sticky='ew', padx=4, pady=4)
+
+        self.scenario_label = self._label(f, 'Transfer scenario', muted=True, size=11)
+        self.scenario_label.grid(row=1, column=6, sticky='w', padx=8)
+        self.scenario_menu = ctk.CTkOptionMenu(
+            f, values=['scratch', 'full', 'scaled_0.25', 'scaled_0.5', 'scaled_0.75', 'selective'],
+            command=self._on_scenario, width=130, height=32,
+            fg_color='#0F141D', button_color=ACCENT, button_hover_color='#2563EB',
+            text_color=TEXT, dropdown_fg_color='#1F2937',
+            font=ctk.CTkFont(size=11, weight='bold'))
+        self.scenario_menu.set('full')
+        self.scenario_menu.grid(row=1, column=7, sticky='ew', padx=4, pady=4)
+        self.scenario_label.grid_remove()
+        self.scenario_menu.grid_remove()
 
         btn_specs = [
             ('Start', self.start_run, ACCENT2),
@@ -455,7 +485,21 @@ class App(ctk.CTk):
             self.algo_seg.set('Q-Learning')
             self.algo = 'Q-Learning'
             self.algo_var.set('Q-Learning')
+        if value == 'source':
+            self.scenario_label.grid_remove()
+            self.scenario_menu.grid_remove()
+        else:
+            self.scenario_label.grid()
+            self.scenario_menu.grid()
         self.load_environment(value)
+
+    def _on_scenario(self, value):
+        self.transfer_scenario = value
+        self.agent = None
+        self.agent_kind = None
+        self._log_event(f'transfer scenario -> {value}')
+        if self.policy_on and not self.playing:
+            self._apply_policy_overlay()
 
     def _on_mode(self, value):
         self.mode = value
@@ -612,9 +656,8 @@ class App(ctk.CTk):
 
     def _default_model_path(self):
         if self.map_kind != 'source':
-            return ('results/models/transfer/transfer_different_full_seed81150.json'
-                    if self.map_kind == 'different'
-                    else 'results/models/transfer/transfer_similar_full_seed81150.json')
+            scenario = getattr(self, 'transfer_scenario', 'full')
+            return f'results/models/transfer/transfer_{self.map_kind}_{scenario}_seed81150.json'
         if self.algo == 'VI':
             g = self.cfg['experiment_grid']['value_iteration']['reference_gamma']
             return f'results/models/vi/vi_sparse_gamma{g}.json'

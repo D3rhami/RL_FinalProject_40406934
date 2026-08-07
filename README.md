@@ -24,38 +24,168 @@
 
 ## Project Overview
 
-<!-- TODO: fill in after implementation -->
+A stochastic 18×18 maze MDP (`environments/maze.py`) with a start → key → closed
+door → goal structure, ≥15% walls, ≥5 penalty cells, and a **limited-energy**
+extra mechanic (energy is part of the state and a hard terminal condition).
+Three algorithms are implemented from scratch and compared on the identical map
+and reward definition: **Value Iteration** (model-based), **Q-Learning**
+(model-free, off-policy), and **SARSA(λ)** (model-free, on-policy with
+eligibility traces). A limited transfer-learning study reuses a trained
+Q-Learning table on two derived target maps. A `customtkinter` GUI drives the
+same environment/agents live. The full analytical write-up (MDP definition,
+per-algorithm results, comparison, transfer, Q1–Q6) is in `report/draft.html`;
+this README covers install/run/reproduce and points out a few
+implementation subtleties worth knowing before you read the report.
 
 ## Environment & MDP
 
-<!-- TODO: describe maze, state space (x, y, has_key, energy), action space,
-     transition function (0.8/0.1/0.1), reward versions, episode termination -->
+- **State** `s = (r, c, has_key, energy)` — position, whether the key has been
+  collected, and remaining energy. Position alone is not Markov here: whether
+  the door blocks the agent depends on `has_key`, and the future horizon
+  depends on `energy`, so both are folded into the state (`environments/maze.py`,
+  `MazeEnv.encode_state` / `all_states`).
+- **Actions** `{UP, DOWN, LEFT, RIGHT}`.
+- **Transition**: intended action with probability `p_intended=0.8`, each
+  perpendicular direction with `p_perp=0.1` each. A wall/boundary collision
+  leaves the agent in place and applies `wall_hit` reward. Attempting the door
+  without the key also leaves the agent in place (`door_attempt` penalty).
+  Energy decreases by 1 every step regardless of outcome.
+- **Rewards**: two versions in `experiments/configs/default_config.json` —
+  `sparse` (`rewards` block: step/wall/penalty/key/door/goal only) and
+  `shaped` (`shaping` block: potential-based distance shaping toward the
+  key/goal, a capped safe-passage bonus near penalty cells, and a wasted-move
+  penalty). Both are exercised through the pipeline; see report §2 for the
+  numeric justification and the sparse-vs-shaped comparison.
+- **Termination**: goal reached with key, energy hits 0, or steps exceed the
+  configured cap (`3 × walkable_cells`, `env.max_steps_multiplier`).
+
+### Why the on-screen policy changes right after key pickup (not a bug)
+
+The door in `source_maze.json` is not a physical bottleneck separate from the
+key — reaching the goal cell only counts as a win when `has_key == 1`
+(`MazeEnv.step`), so the key is a *reward-gated precondition*, not a second
+maze region to route around. Q/V are stored per full state `(r, c, has_key,
+energy)`, so the optimal action at the *same cell* can legitimately differ
+before vs. after key pickup (e.g. "route toward the key" vs. "route toward the
+goal"). What the GUI's policy overlay shows after key pickup is simply the
+`has_key=1` slice of the same table — not a re-learned or corrupted policy.
+Cells that look blank in the overlay are states that were rarely or never
+visited during training (their Q-row never moved off zero), not an error in
+the slicing logic (`gui/app.py`, `_load_policy_grid` / `_slice_has_key_energy`).
 
 ## Algorithms
 
-### Value Iteration
+### Value Iteration (`agents/value_iteration.py`)
 
-<!-- TODO: Bellman backup, convergence criterion, γ sweep -->
+From-scratch Bellman backup `V(s) ← max_a Σ P(s'|s,a)[R + γV(s')]` with a
+max-ΔV convergence threshold (`theta`), run at 3 `γ` values
+(`experiments/configs/default_config.json → value_iteration.gamma_sweep`).
+Outputs: `results/models/vi/vi_*.json` (V, policy, iteration count, runtime),
+`results/figures/vi/vi_value_policy.png` (heatmap + greedy arrows),
+`results/figures/vi/vi_gamma_sensitivity.png`, `vi_convergence.png`. VI's
+greedy policy is the reference used for the cross-algorithm agreement metric.
 
-### Q-Learning
+### Q-Learning (`agents/q_learning.py`)
 
-<!-- TODO: off-policy, ε-greedy, linear vs exponential decay -->
+Off-policy `Q(s,a) ← Q(s,a) + α[r + γ max_a' Q(s',a') − Q(s,a)]`, ε-greedy
+behaviour with **two** ε-decay schedules (linear, exponential), trained for
+both `sparse` and `shaped` reward (2×2 grid × 3 seeds, 50 000 episodes each).
+Per-episode reward/steps/success/wall-hits/penalty-entries are logged to
+`results/raw_data/q_learning/q_learning_training.csv`; one real Q-update is
+hand-reconstructed from `q_update_trace.csv` in the report (§4.2).
 
-### SARSA(λ)
+### SARSA(λ) (`agents/sarsa_lambda.py`)
 
-<!-- TODO: on-policy, replacing traces, λ sweep -->
+On-policy `δ = r + γQ(s',a') − Q(s,a)`, **replacing** eligibility traces
+(`E(s,a) ← γλE(s,a) + 1{s=s_t,a=a_t}`, capped at 1 on revisit — see
+"Eligibility trace type" below), swept over `λ ∈ {0, 0.3, 0.7, 0.9}`.
 
-### Cross-Algorithm Comparison
+**Reward-mode fix (this audit).** SARSA's experiment grid originally only
+ever trained with `reward_mode=sparse`
+(`experiment_grid.sarsa_lambda.reward_mode`, singular field), while
+Q-Learning's grid always trained both `sparse` **and** `shaped`
+(`experiment_grid.q_learning.reward_modes`, a list). That asymmetry — not
+`max_energy=60` — is what made SARSA's success rate look broken (λ=0.9 hit
+**0.0** eval success on all 3 seeds; even λ=0.3/0.7 only reached ~1–10%):
+SARSA never got the same shaped-reward benefit that took Q-Learning from
+~11% to ~43% eval success. The config now has
+`experiment_grid.sarsa_lambda.reward_modes: ["sparse", "shaped"]` (plus a
+`reference_reward_mode: "sparse"` used only for the Phase-8 cross-algorithm
+comparison, see below), `run_experiments.py` trains both, and
+`experiments/analysis.py` adds a `sarsa_rewardmode_comparison.png` figure
+mirroring Q-Learning's. `max_energy=60` itself is independently justified —
+see "Energy budget selection" below — and was left unchanged.
 
-<!-- TODO: runtime, sample efficiency, policy agreement with VI -->
+### Cross-Algorithm Comparison (`experiments/compare.py`)
+
+VI, Q-Learning, and SARSA(λ) are compared on the identical map **and identical
+reward mode**, as the assignment requires. This audit fixed a real fairness
+bug: `_pick_best_ql_variant`/`_pick_best_sarsa_variant` previously picked
+whichever `(reward_mode, schedule/λ)` had the single highest
+`eval_success_rate` — which, once shaped runs existed, silently selected
+shaped Q-Learning against sparse VI/SARSA. Both functions now restrict the
+search to each algorithm's `experiment_grid.*.reference_reward_mode`
+(`sparse` for all three) before picking the best schedule/λ, so
+`results/raw_data/comparison/comparison_summary.csv` compares like-for-like.
+Runtime, samples-to-90%, cross-seed/within-run stability, path quality
+(eval mean steps), and % greedy-action agreement with VI (overall,
+visited-only, near-penalty) are all reported; `policy_grid.png` /
+`agreement_grid.png` visualize agreement, and
+`comparison_sample_states.csv` lists concrete mismatched states analyzed in
+the report (§6.2).
 
 ## Transfer Learning
 
-<!-- TODO: source env, similar target, different target, 4 scenarios, negative transfer case -->
+Q-Learning only, per the assignment. A source Q-table is trained on
+`source_maze.json`, then reused on two BFS-validated target maps generated by
+`environments/generator.py --targets`:
+
+- **similar**: `similar_obstacle_change_pct=0.175` (15–20% obstacles moved),
+  start/key/goal unchanged.
+- **different**: `different_obstacle_change_pct=0.40` (≥35% obstacles
+  changed), key/goal relocated, extra penalty cells added.
+
+`transfer/transfer_learning.py` runs the full experiment matrix
+(`_scenario_specs`): **scratch** (zero-init baseline), **full** (copy the
+entire source Q-table), **scaled** at β ∈ {0.25, 0.50, 0.75}
+(`Q_T⁽⁰⁾ = βQ_S`), and **selective** (copy only states whose local wall
+neighborhood is unchanged, via `unchanged_state_indices`) — 6 scenario
+variants × 2 targets × 3 seeds = 36 runs, plus a dedicated negative-transfer
+case study (`run_negative_transfer_case`). Initial (jumpstart), learning-speed
+(episodes-to-90%), and final (eval) performance are reported separately per
+scenario/target in `results/raw_data/transfer/transfer_summary.csv` and
+plotted in `results/figures/transfer/transfer_{similar,different}_comparison.png`.
+`transfer_maze_{similar,different}.png` shows the source maze and the target
+maze side by side with each agent's real greedy rollout, so the structural
+differences between the two maps and how the transferred agent behaves on the
+new layout are visible together. `transfer_q_diff.png` shows the spatial
+|ΔQ| before/after fine-tuning, and `negative_transfer_recovery.png` /
+`negative_transfer_case.json` document one concrete case where transferred
+knowledge initially pointed the wrong way and how continued training on the
+target corrected it. See report §7 for the full numeric comparison and Q6.
 
 ## GUI
 
-<!-- TODO: controls, overlays, visual elements -->
+`customtkinter` app (`gui/app.py` + `gui/renderer.py`) with step-by-step
+animated rollout, live info panel (episode/step/reward/ε/key/energy/recent
+success rate), algorithm selector (VI/Q-Learning/SARSA(λ)), train/eval mode
+toggle with an episode-count input for training, start/stop/continue/reset/
+rerun controls, animation-speed slider, and a policy-overlay toggle that shows
+per-cell greedy arrows for the agent's *current* `(has_key, energy)` slice.
+
+- **Target-map selector.** Picking a transfer target map is a secondary,
+  advanced option (most of the assignment's required controls concern the
+  *source* map/algorithm), so it's deliberately a small, muted dropdown
+  tucked in the bottom-right corner of the maze view (`env_corner` /
+  `env_menu` in `gui/app.py`) rather than a full-width control competing with
+  Algorithm/Mode in the primary CONTROLS row.
+- **Transfer scenario picker.** When a target map (`similar`/`different`) is
+  selected, a `Transfer scenario` dropdown appears in CONTROLS
+  (`scenario_menu`) letting you switch between all 6 trained scenarios
+  (`scratch`, `full`, `scaled_0.25/0.5/0.75`, `selective`) — previously the
+  GUI only ever loaded the `full` scenario model.
+
+## Installation
 
 ## Installation
 
@@ -239,63 +369,108 @@ and asserts all 9 appear in the detailed per-step logs. Summary CSV and detail
 JSON files land in `results/raw_data/verify_logger_summary.csv` and
 `results/raw_data/verify_logger_details/`.
 
-### Energy budget selection (`max_energy`)
+### Energy budget selection (`max_energy`) — revised after a learnability audit
 
-The custom fuel feature is only meaningful if the energy budget is a *real* constraint:
-big enough that the maze stays solvable, small enough that fuel still decides episodes.
-Probed with `experiments/energy_sweep.py` (random-policy read + Value Iteration to
-convergence for the optimality signal):
+**This project went through two rounds of energy selection.** The first round
+(below, "VI-only view") only checked whether the budget was *solvable at all*
+and picked the smallest such budget (60). The second round (this section)
+adds a check the first round was missing: whether **model-free learners
+(Q-Learning/SARSA) can actually make progress** at that budget within a
+realistic episode count — and found that 60 was a poor choice by that
+criterion, even though VI "solves" it trivially.
+
+**Why VI success alone is the wrong criterion.** VI gets the exact transition
+model and computes the optimum directly — it never has to *survive* an energy
+budget while still exploring randomly. Q-Learning/SARSA start ε-greedy and
+have to accumulate enough successful (or partially successful) episodes to
+learn anything; if the budget is so tight that almost every early, undirected
+rollout dies of `energy_depleted` before it ever reaches the key, the reward
+signal needed to learn is starved. `experiments/energy_sweep.py --with-learners`
+makes this concrete: it trains a short, single-seed, shaped-reward Q-Learning
+and SARSA(λ=0.3) run at each candidate budget and reports **greedy eval
+success**, not just whether VI can solve it.
 
 ```bash
+# VI-only view (fast, no learners) — establishes solvability floor
 python experiments/energy_sweep.py --budgets 30 50 60 80 100 150 200 --episodes 50
+
+# Learnability view (adds a short QL + SARSA probe per budget)
+python experiments/energy_sweep.py --budgets 60 100 150 200 300 400 500 \
+    --skip-vi --with-learners --learn-episodes 20000 --learn-eval-episodes 100
 ```
 
-Shortest feasible path start→key→goal = **30** (BFS-valid at every budget ≥ 30).
+**VI-only view** (`n_states`, random-policy behaviour, VI eval success) —
+shortest feasible path start→key→goal = **30**, so budgets ≥ 30 are BFS-valid:
 
-**The random-policy column cannot decide this on its own.** A uniform-random policy
-dies of `energy_depleted` in 100% of episodes at *every* budget from 30 through 200
-(goal rate 0.00, one lucky episode at 200), and `random_mean_steps` simply mirrors the
-budget itself (30.0, 50.0, 60.0 …). A random walk never gets close to solving an
-18×18 key→door→goal maze at any of these values, so it is not the right lens for
-finding the constraint boundary. The real signal is **VI success rate**: VI computes
-the *optimal* policy, so it shows where the budget becomes too tight to solve at all
-(30), where it is borderline (50), and where it is tight-but-reliable (60).
+| `max_energy` | n_states | random goal rate | VI success | VI mean steps |
+|--------------|----------|-------------------|------------|----------------|
+| 30           | 20,088   | 0.00              | **0.00**   | 30.0           |
+| 50           | 33,048   | 0.00              | 0.98       | 38.69          |
+| 60           | 39,528   | 0.00              | **1.00**   | 38.75          |
+| 80–200       | 52k–130k | 0.00–0.01         | 1.00       | 38.75          |
 
-| `max_energy` | n_states | random energy-depleted | random goal | VI success | VI mean return | VI mean steps | VI iters | VI runtime |
-|--------------|----------|------------------------|-------------|------------|----------------|---------------|----------|------------|
-| 30           | 20,088   | 1.00                   | 0.00        | **0.00**   | 15.92          | 30.0          | 31       | 16.7 s     |
-| 50           | 33,048   | 1.00                   | 0.00        | 0.98       | 199.75         | 38.69         | 51       | 46.6 s     |
-| **60**       | 39,528   | 1.00                   | 0.00        | **1.00**   | 203.65         | 38.75         | 61       | 68.5 s     |
-| 80           | 52,488   | 1.00                   | 0.00        | 1.00       | 203.65         | 38.75         | 81       | 121.2 s    |
-| 100          | 65,448   | 1.00                   | 0.00        | 1.00       | 203.65         | 38.75         | 92       | 142.8 s    |
-| 150          | 97,848   | 1.00                   | 0.00        | 1.00       | 203.65         | 38.75         | 92       | 195.8 s    |
-| 200          | 130,248  | 1.00                   | 0.00        | 1.00       | 203.65         | 38.75         | 92       | 256.9 s    |
+By this view alone, 60 looks like "the smallest fully-reliable budget" — but
+VI's mean steps (38.75) barely change across the whole range, which is itself
+the tell: **a competent policy's actual energy usage doesn't depend on the
+budget**, so the "slack" (`max_energy − 38.75`) is the real free parameter,
+and the VI-only view says nothing about whether a *sample-based* learner can
+find that policy in the first place.
 
-**Decision rule:** smallest budget where VI still *reliably* succeeds
-(`vi_eval_success_rate` ≈ 1.0).
+**Learnability view** — single-seed, 20,000-episode shaped-reward probe,
+100 greedy eval episodes (`results/raw_data/energy/energy_sweep.csv`):
 
-- **30** → VI success **0.00**: the budget equals the BFS path length, leaving zero
-  slack for the 0.8/0.1/0.1 stochastic transitions, so even the optimal policy cannot
-  finish. Infeasible.
-- **50** → VI success **0.98**: 1 failure in 50 eval episodes. Borderline — mostly
-  works but not reliable, so it fails the decision rule.
-- **60** → VI success **1.00** with the same optimal return/steps as every larger
-  budget (203.65 / 38.75). **This is the smallest budget with a fully reliable optimal
-  policy, i.e. the tight-but-solvable boundary.**
+| `max_energy` | n_states | slack over VI-optimal (38.75) | QL probe eval success | SARSA(0.3) probe eval success |
+|--------------|----------|-------------------------------|-----------------------|-------------------------------|
+| 60           | 39,528   | 1.5×                          | **0.18** (6k-ep probe)| **0.15** (6k-ep probe)        |
+| 100          | 65,448   | 2.6×                          | 0.60                  | 0.66                          |
+| 130          | 84,888   | 3.4×                          | 0.69                  | 0.62                          |
+| 150          | 97,848   | 3.9×                          | 0.70                  | 0.50                          |
+| 200          | 130,248  | 5.2×                          | 0.78                  | 0.51                          |
+| 300          | 195,048  | 7.7×                          | 0.71                  | 0.52                          |
+| 400          | 259,848  | 10.3×                         | 0.73                  | 0.69                          |
+| **500**      | 324,648  | **12.9×**                     | **0.86**              | **0.71**                      |
 
-**Decision: `max_energy = 60`** (set in `experiments/configs/default_config.json`).
+(60's row used the earlier 6,000-episode probe; 100–500 used the 20,000-episode
+probe — both far shorter than the real 50,000-episode training budget, so
+these are relative learnability signals, not final performance numbers.)
 
-- It is a genuine constraint: random policy dies of fuel in 100% of episodes, and the
-  budget (60) is only ~1.5× the ~39 energy units the optimal policy actually needs —
-  fuel still binds.
-- It is solvable: VI converges (61 iters) and its greedy policy wins 100% of evals.
-- Budgets 80–200 add no optimality (identical 1.00 / 203.65 / 38.75) but strictly
-  grow the MDP (52,488 → 130,248 states) and VI runtime (121 s → 257 s). VI iteration
-  count even plateaus at 92 once the budget stops binding, so beyond ~100 the extra
-  state space buys nothing.
-- Note that even at 200 the *random* policy only reaches the goal on 1/200 episodes,
-  so the earlier max_energy=200 "failure" was about the budget ceasing to bind an
-  *optimal* agent — energy never stops being fatal for a no-skill policy.
+**Trade-off, stated honestly.** Raising the budget helps model-free learners
+in two ways: fewer early rollouts die before finding any reward signal, and
+the eventual optimal policy has more room for slip-induced detours without
+running out of fuel. But it also grows the state space linearly (39.5k → 325k
+states at 500), which for a *fixed* training budget dilutes visits per state —
+and, more importantly, at very large slack (12.9× the optimal path) the
+energy constraint stops being something a trained policy ever really feels,
+which is in tension with the assignment's requirement that the custom
+mechanic have "a real effect, not just visual." The learnability numbers
+above don't show a clean monotonic story (150→200→300 wobbles for SARSA) —
+consistent with this being a single-seed, short-probe signal, not a precise
+optimum.
+
+**Decision: `max_energy = 500`.** Chosen because it gave the strongest
+model-free learnability signal in the probe (QL 0.86 / SARSA 0.71, both the
+best of the candidates tested) and the project prioritizes giving Q-Learning,
+SARSA(λ), and the transfer-learning scenarios a realistic chance to reach
+non-trivial success rates within the actual 50,000-episode training budget —
+over keeping the energy constraint as tight as mathematically possible. The
+full 50k-episode retraining under this budget (VI + QL + SARSA + transfer;
+`experiments/run_experiments.py --fresh`) is the real confirmation of this
+choice; the probe above is a fast (~15 minutes total) way to search the space
+before committing to the ~90-minute full rerun. `max_energy` and its sweep
+candidates live in `experiments/configs/default_config.json` → `env`.
+
+### Cleanliness / reproducibility note
+
+Every figure under `results/figures/` and every model/CSV under
+`results/models/` and `results/raw_data/` is produced directly by
+`experiments/run_experiments.py`, `experiments/analysis.py`, and
+`experiments/compare.py` from the config above — a clean clone + the
+"Reproducing Results" steps regenerates all of it with no manual edits.
+Stray diagnostic/debug artifacts found during this audit (ad-hoc energy
+probes, superseded comparison figures from before the reward-mode fairness
+fix, an old `gui_checks/` dump) were moved to `tmp/old_results_backup/`
+rather than left mixed into `results/`, so `results/` only ever contains
+outputs a grader can regenerate from the committed scripts/config.
 
 ## Project Structure
 
@@ -319,14 +494,55 @@ RL_FinalProject_40406934/
 
 ## Results Summary
 
-<!-- TODO: fill in key numbers after experiments -->
+Full numbers, tables, and per-chart analysis live in `report/draft.html`
+(every claim there cites a specific CSV/figure under `results/`). Headline
+findings:
+
+- **VI** solves the map perfectly at every tested γ (eval success **1.0**,
+  ~38.75 steps); γ mostly rescales `V(start)`, not the greedy policy.
+- **Q-Learning**: shaping is a large win — shaped/linear reaches the best
+  *final* greedy policy, while shaped/exponential finds first success soonest
+  but with a weaker final policy; sparse 50k episodes is not enough to match
+  VI. See `results/figures/q_learning/`.
+- **SARSA(λ)**: replacing traces avoid runaway eligibility under looping
+  exploration; λ trades off eval quality vs. training speed differently
+  (see report §5.1 and the "Reward-mode fix" note above for why the original
+  sparse-only sweep looked broken). See `results/figures/sarsa/`.
+- **Comparison**: VI is the reference optimum; both model-free methods trail
+  it on policy agreement and path efficiency by a margin quantified in
+  `comparison_summary.csv` and visualized in `results/figures/comparison/`.
+- **Transfer**: on the *similar* target, transfer jumpstarts return and can
+  match/beat training from scratch; on the *different* target (relocated
+  key/goal, extra penalties), full transfer is actively harmful and scratch
+  wins — see `results/figures/transfer/` and the negative-transfer case study.
 
 ## AI Usage Disclosure
 
-| Section | AI suggestion received | Change made by student | Reason for change |
-|---------|----------------------|----------------------|-------------------|
-| <!-- TODO: add ≥2 real examples after implementation --> | | | |
+AI assistants (Cursor agents) were used throughout for implementation,
+debugging, plotting, and drafting experiment scripts/docs. All numbers cited
+in the report and here come from CSVs/models actually produced by local runs
+under `results/`, not hand-typed. The full disclosure table with ≥2 flawed
+AI-suggestion examples (energy-budget myth, max-energy-only policy slicing,
+a reward-mode mismatch mis-diagnosed as an energy problem, RdYlGn
+colormap mash-up, generic "transfer was good" prose) is in `report/draft.html`
+§9 — reproduced in short form here:
+
+| Use case | Flawed/incomplete AI suggestion | Student correction | Why |
+|----------|----------------------------------|---------------------|-----|
+| SARSA stuck near 0% success | "Just double `max_energy` (60→100)" | Diagnosed the real cause instead: `sarsa_lambda`'s experiment grid only ever trained `reward_mode=sparse` while `q_learning`'s grid trained both `sparse` and `shaped`; added the missing shaped sweep and kept `max_energy=60` | Doubling energy doesn't explain λ=0.9's total (0%) failure; the asymmetric reward-mode grid does, and is fixable without re-justifying the energy budget |
+| Cross-algorithm "best" model selection | Pick whichever `(reward_mode, schedule/λ)` has the single highest `eval_success_rate` | Restricted selection to each algorithm's `reference_reward_mode` (`sparse`) before ranking, in both `_pick_best_ql_variant` and `_pick_best_sarsa_variant` | The unrestricted version silently compared shaped Q-Learning against sparse VI/SARSA, violating the assignment's "identical reward definition" requirement for Phase 8 |
+| Policy overlay showing one arrow | Read the greedy policy at `energy = max_energy` only | Slice by the agent's *current* `(has_key, energy)`, falling back to the most-visited energy per cell for saved models | After the first step, energy is never `max_energy` again, so the old slice showed an almost-empty policy |
+| GUI entry point | Left `main.py` printing "GUI not implemented" | Wired `main.py` (no `--algo`) to launch `gui.app.App` | The GUI was fully implemented; the CLI dispatcher just never called it |
 
 ## References
 
-<!-- TODO: cite textbooks, papers, and any adapted code snippets -->
+- Sutton, R. S., & Barto, A. G. (2018). *Reinforcement Learning: An
+  Introduction* (2nd ed.). MIT Press. — Bellman backups (VI), Q-Learning,
+  SARSA(λ) with eligibility traces, ε-greedy exploration.
+- Course lecture notes / assignment specification for this project
+  (`tmp/final_project_text.md`) — state/action/reward design constraints,
+  transfer-learning scenario definitions, and required deliverables.
+- Third-party libraries only (no RL libraries): NumPy, Pandas, Matplotlib,
+  `customtkinter`, `pygame` (optional), `pytest` — see `requirements.txt`.
+  No code from Stable-Baselines/RLlib or similar is used anywhere in
+  `agents/`.

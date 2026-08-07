@@ -25,10 +25,67 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from environments.maze import MazeEnv, load_config
 from environments.generator import load_map, validate_map, _bfs_distance, _PRE_KEY_PASS, _POST_KEY_PASS
 from agents.value_iteration import ValueIteration
+from agents.q_learning import QLearningAgent
+from agents.sarsa_lambda import SarsaLambdaAgent
 from experiments.run_experiments import derive_seeds, evaluate_greedy_policy
 
 MAP_PATH = 'environments/maps/source_maze.json'
 DEFAULT_BUDGETS = [50, 60, 100, 150]
+
+
+def learnability_probe(cfg_e, seed, eval_seed, episodes, eval_episodes):
+    """Fast (single-seed, short-budget) check of whether model-free learners
+    can actually make progress at this energy, not just whether VI can.
+
+    VI ignores sample efficiency entirely (it gets the exact transition model
+    and computes the optimum in one shot), so a budget where VI succeeds
+    100% of the time can still be nearly unlearnable for epsilon-greedy
+    exploration if most early random rollouts burn all their energy before
+    ever reaching the key. This probe trains a *short* shaped-reward QL and
+    SARSA(lambda=0.3) run (single seed, exponential decay so it doesn't
+    depend on total-episode count) at each candidate energy and evaluates
+    greedy performance, to see where model-free learning actually gets
+    traction within a realistic episode budget.
+    """
+    qcfg = cfg_e['q_learning']
+    scfg = cfg_e['sarsa_lambda']
+    out = {}
+
+    t0 = time.time()
+    ql_env = MazeEnv(MAP_PATH, config=cfg_e, reward_mode='shaped', seed=seed)
+    ql_agent = QLearningAgent(
+        ql_env, alpha=qcfg['alpha'], gamma=qcfg['gamma'],
+        epsilon_start=qcfg['epsilon_start'], epsilon_min=qcfg['epsilon_min'],
+        decay_type='exponential', decay_param=qcfg['exponential_decay_rate'],
+        num_episodes=episodes, reward_mode='shaped', seed=seed)
+    ql_agent.train()
+    ql_eval_env = MazeEnv(MAP_PATH, config=cfg_e, reward_mode='shaped', seed=seed)
+    ql_metrics = evaluate_greedy_policy(
+        ql_eval_env, lambda s, _a=ql_agent: int(np.argmax(_a.Q[_a.env.encode_state(s)])),
+        eval_seed, eval_episodes)
+    out['ql_probe_eval_success'] = ql_metrics['eval_success_rate']
+    out['ql_probe_eval_mean_return'] = ql_metrics['eval_mean_return']
+    out['ql_probe_eval_mean_steps'] = ql_metrics['eval_mean_steps']
+    out['ql_probe_train_seconds'] = round(time.time() - t0, 2)
+
+    t0 = time.time()
+    sa_env = MazeEnv(MAP_PATH, config=cfg_e, reward_mode='shaped', seed=seed)
+    sa_agent = SarsaLambdaAgent(
+        sa_env, alpha=scfg['alpha'], gamma=scfg['gamma'], lam=0.3,
+        trace_type=scfg['trace_type'],
+        epsilon_start=scfg['epsilon_start'], epsilon_min=scfg['epsilon_min'],
+        decay_type='exponential', decay_param=scfg['exponential_decay_rate'],
+        num_episodes=episodes, reward_mode='shaped', seed=seed)
+    sa_agent.train()
+    sa_eval_env = MazeEnv(MAP_PATH, config=cfg_e, reward_mode='shaped', seed=seed)
+    sa_metrics = evaluate_greedy_policy(
+        sa_eval_env, lambda s, _a=sa_agent: int(np.argmax(_a.Q[_a.env.encode_state(s)])),
+        eval_seed, eval_episodes)
+    out['sarsa_probe_eval_success'] = sa_metrics['eval_success_rate']
+    out['sarsa_probe_eval_mean_return'] = sa_metrics['eval_mean_return']
+    out['sarsa_probe_eval_mean_steps'] = sa_metrics['eval_mean_steps']
+    out['sarsa_probe_train_seconds'] = round(time.time() - t0, 2)
+    return out
 
 
 def _cfg_with_energy(cfg, max_energy):
@@ -61,7 +118,8 @@ def random_policy_stats(env, n_episodes, seed_base):
     }
 
 
-def run_sweep(cfg, budgets, n_episodes=200, skip_vi=False):
+def run_sweep(cfg, budgets, n_episodes=200, skip_vi=False,
+              with_learners=False, learn_episodes=6000, learn_eval_episodes=60):
     data = load_map()
     d1 = _bfs_distance(data['grid'], data['start_pos'], data['key_pos'], _PRE_KEY_PASS)
     d2 = _bfs_distance(data['grid'], data['key_pos'], data['goal_pos'], _POST_KEY_PASS)
@@ -106,6 +164,14 @@ def run_sweep(cfg, budgets, n_episodes=200, skip_vi=False):
             'vi_iterations': None,
             'vi_runtime_seconds': None,
             'vi_converged': None,
+            'ql_probe_eval_success': None,
+            'ql_probe_eval_mean_return': None,
+            'ql_probe_eval_mean_steps': None,
+            'ql_probe_train_seconds': None,
+            'sarsa_probe_eval_success': None,
+            'sarsa_probe_eval_mean_return': None,
+            'sarsa_probe_eval_mean_steps': None,
+            'sarsa_probe_train_seconds': None,
         }
 
         if not skip_vi and valid:
@@ -135,6 +201,19 @@ def run_sweep(cfg, budgets, n_episodes=200, skip_vi=False):
         elif not valid:
             print("  skip VI (map not BFS-reachable within budget)")
 
+        if with_learners and valid:
+            probe_seed = derive_seeds(cfg['base_seed'], n=grid['n_seeds'])[0][0]
+            t0 = time.time()
+            probe = learnability_probe(cfg_e, probe_seed, eval_seed,
+                                        learn_episodes, learn_eval_episodes)
+            row.update(probe)
+            print(f"  QL probe ({learn_episodes} eps, shaped, single seed): "
+                  f"eval_success={probe['ql_probe_eval_success']:.2f} "
+                  f"({probe['ql_probe_train_seconds']:.1f}s)")
+            print(f"  SARSA(0.3) probe ({learn_episodes} eps, shaped, single seed): "
+                  f"eval_success={probe['sarsa_probe_eval_success']:.2f} "
+                  f"({probe['sarsa_probe_train_seconds']:.1f}s)")
+
         rows.append(row)
 
     out_csv = Path('results/raw_data/energy/energy_sweep.csv')
@@ -151,7 +230,8 @@ def run_sweep(cfg, budgets, n_episodes=200, skip_vi=False):
 
 def _plot_sweep(rows):
     energies = [r['max_energy'] for r in rows]
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    has_probe = any(r.get('ql_probe_eval_success') is not None for r in rows)
+    fig, axes = plt.subplots(1, 3 if has_probe else 2, figsize=(15 if has_probe else 10, 4))
 
     axes[0].plot(energies, [r['random_energy_depleted_rate'] for r in rows],
                  'o-', label='energy_depleted')
@@ -175,6 +255,21 @@ def _plot_sweep(rows):
     axes[1].set_ylabel('VI greedy eval success')
     axes[1].set_title('Optimal-policy success vs energy budget')
 
+    if has_probe:
+        ql_rates = [r.get('ql_probe_eval_success') for r in rows]
+        sarsa_rates = [r.get('sarsa_probe_eval_success') for r in rows]
+        xs_ql = [e for e, v in zip(energies, ql_rates) if v is not None]
+        ys_ql = [v for v in ql_rates if v is not None]
+        xs_sa = [e for e, v in zip(energies, sarsa_rates) if v is not None]
+        ys_sa = [v for v in sarsa_rates if v is not None]
+        axes[2].plot(xs_ql, ys_ql, 'o-', color='C0', label='Q-Learning (shaped)')
+        axes[2].plot(xs_sa, ys_sa, 's-', color='C3', label='SARSA(0.3, shaped)')
+        axes[2].set_ylim(-0.05, 1.05)
+        axes[2].set_xlabel('max_energy')
+        axes[2].set_ylabel('greedy eval success (short probe)')
+        axes[2].set_title('Model-free learnability vs energy budget')
+        axes[2].legend()
+
     fig.tight_layout()
     out = Path('results/figures/energy/energy_sweep.png')
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -190,13 +285,21 @@ def main():
     parser.add_argument('--skip-vi', action='store_true',
                         help='Skip VI (random policy only; much faster)')
     parser.add_argument('--budgets', type=int, nargs='+', default=DEFAULT_BUDGETS)
+    parser.add_argument('--with-learners', action='store_true',
+                        help='Also run a short single-seed QL + SARSA(0.3) probe per budget')
+    parser.add_argument('--learn-episodes', type=int, default=6000,
+                        help='Episode budget for the learnability probe (kept short for speed)')
+    parser.add_argument('--learn-eval-episodes', type=int, default=60,
+                        help='Greedy eval episodes for the learnability probe')
     args = parser.parse_args()
 
     cfg = load_config()
     budgets = args.budgets
     if budgets == DEFAULT_BUDGETS:
         budgets = cfg.get('env', {}).get('energy_sweep', DEFAULT_BUDGETS)
-    run_sweep(cfg, budgets, n_episodes=args.episodes, skip_vi=args.skip_vi)
+    run_sweep(cfg, budgets, n_episodes=args.episodes, skip_vi=args.skip_vi,
+              with_learners=args.with_learners, learn_episodes=args.learn_episodes,
+              learn_eval_episodes=args.learn_eval_episodes)
 
 
 if __name__ == '__main__':

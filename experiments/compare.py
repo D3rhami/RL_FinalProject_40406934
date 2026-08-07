@@ -100,12 +100,12 @@ def _check_prereqs(cfg):
                 p = Path(f'results/models/q_learning/q_learning_{reward_mode}_{schedule}_seed{seed}.json')
                 if not p.exists():
                     missing.append(str(p))
-    for lam in grid['sarsa_lambda']['lambdas']:
-        for seed in seeds:
-            rm = grid['sarsa_lambda']['reward_mode']
-            p = Path(f'results/models/sarsa/sarsa_{rm}_lambda{lam}_seed{seed}.json')
-            if not p.exists():
-                missing.append(str(p))
+    for rm in grid['sarsa_lambda']['reward_modes']:
+        for lam in grid['sarsa_lambda']['lambdas']:
+            for seed in seeds:
+                p = Path(f'results/models/sarsa/sarsa_{rm}_lambda{lam}_seed{seed}.json')
+                if not p.exists():
+                    missing.append(str(p))
     if missing:
         print("Missing required model files. Run `python experiments/run_experiments.py` first.")
         for m in missing[:20]:
@@ -114,7 +114,14 @@ def _check_prereqs(cfg):
 
 
 def _pick_best_ql_variant(cfg, seeds):
+    # Cross-algorithm comparison (Phase 8) requires an identical reward
+    # definition for VI/QL/SARSA (see spec sec. "مقایسه سه الگوریتم"), so the
+    # "best" QL variant is chosen only among reference_reward_mode runs, not
+    # across sparse+shaped (shaped nearly always wins on eval_success_rate,
+    # which would silently compare QL-shaped against VI/SARSA-sparse).
+    ref_rm = cfg['experiment_grid']['q_learning']['reference_reward_mode']
     summary = pd.read_csv('results/raw_data/q_learning/q_learning_summary.csv')
+    summary = summary[summary['reward_mode'] == ref_rm]
     agg = summary.groupby(['reward_mode', 'schedule'])['eval_success_rate'].mean().reset_index()
     best = agg.loc[agg['eval_success_rate'].idxmax()]
     subset = summary[(summary['reward_mode'] == best['reward_mode']) &
@@ -124,12 +131,16 @@ def _pick_best_ql_variant(cfg, seeds):
 
 
 def _pick_best_sarsa_variant(cfg, seeds):
+    # Same fairness constraint as _pick_best_ql_variant: restrict to the
+    # reference reward mode so the comparison stays apples-to-apples with VI.
+    ref_rm = cfg['experiment_grid']['sarsa_lambda']['reference_reward_mode']
     summary = pd.read_csv('results/raw_data/sarsa/sarsa_summary.csv')
+    summary = summary[summary['reward_mode'] == ref_rm]
     agg = summary.groupby('lambda')['eval_success_rate'].mean().reset_index()
     best_lam = float(agg.loc[agg['eval_success_rate'].idxmax(), 'lambda'])
     subset = summary[summary['lambda'] == best_lam]
     best_seed = int(subset.loc[subset['eval_success_rate'].idxmax(), 'seed'])
-    return best_lam, best_seed
+    return ref_rm, best_lam, best_seed
 
 
 def build_comparison(cfg):
@@ -153,8 +164,7 @@ def build_comparison(cfg):
     ql_Q = np.array(ql_model['Q'])
     ql_visits = np.array(ql_model['visits'])
 
-    sarsa_lam, sarsa_seed = _pick_best_sarsa_variant(cfg, seeds)
-    sarsa_rm = grid['sarsa_lambda']['reward_mode']
+    sarsa_rm, sarsa_lam, sarsa_seed = _pick_best_sarsa_variant(cfg, seeds)
     sarsa_model = _load_json(f'results/models/sarsa/sarsa_{sarsa_rm}_lambda{sarsa_lam}_seed{sarsa_seed}.json')
     sarsa_states = [tuple(s) for s in sarsa_model['states']]
     sarsa_Q = np.array(sarsa_model['Q'])
@@ -212,7 +222,7 @@ def build_comparison(cfg):
                'all_agreement': ql_all, 'visited_agreement': ql_vis, 'n_visited': ql_n,
                'near_penalty_agreement': ql_near_pen, 'near_penalty_n': ql_near_pen_n,
                'disagreements': ql_dis},
-        'sarsa': {'lam': sarsa_lam, 'seed': sarsa_seed,
+        'sarsa': {'reward_mode': sarsa_rm, 'lam': sarsa_lam, 'seed': sarsa_seed,
                   'model': sarsa_model, 'states': sarsa_states,
                   'Q': sarsa_Q, 'visits': sarsa_visits,
                   'all_agreement': sarsa_all, 'visited_agreement': sarsa_vis, 'n_visited': sarsa_n,
@@ -395,7 +405,8 @@ def main():
     ql_subset = ql_summary[(ql_summary['reward_mode'] == result['ql']['reward_mode']) &
                             (ql_summary['schedule'] == result['ql']['schedule'])]
     sarsa_summary = pd.read_csv('results/raw_data/sarsa/sarsa_summary.csv')
-    sarsa_subset = sarsa_summary[sarsa_summary['lambda'] == result['sarsa']['lam']]
+    sarsa_subset = sarsa_summary[(sarsa_summary['lambda'] == result['sarsa']['lam']) &
+                                  (sarsa_summary['reward_mode'] == result['sarsa']['reward_mode'])]
 
     ledger_runtime = _load_ledger_runtime()
     ql_gaps = [d['action_gap'] for d in result['ql']['disagreements']]

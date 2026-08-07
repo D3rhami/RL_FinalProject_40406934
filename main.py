@@ -137,7 +137,9 @@ def main():
     args = parser.parse_args()
 
     if args.algo is None:
-        print("No --algo given. GUI entry point not yet implemented (Phase 10).")
+        print("No --algo given, launching the GUI (python main.py --algo ... for a CLI run).")
+        from gui.app import App
+        App().mainloop()
         return
 
     cfg = load_config()

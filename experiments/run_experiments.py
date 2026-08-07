@@ -316,13 +316,13 @@ def run_sarsa_lambda(cfg):
     sg = grid['sarsa_lambda']
     scfg = cfg['sarsa_lambda']
     seeds, eval_seed = derive_seeds(cfg['base_seed'], n=grid['n_seeds'])
-    reward_mode = sg['reward_mode']
     trace_cfg = sg['trace_run']
     trace_seed = seeds[0]
 
     training_rows, summary_rows = [], []
 
-    for lam in sg['lambdas']:
+    for reward_mode in sg['reward_modes']:
+      for lam in sg['lambdas']:
         for seed in seeds:
             variant_id = f"sarsa_{reward_mode}_lambda{lam}_seed{seed}"
             t0 = time.time()
@@ -339,7 +339,8 @@ def run_sarsa_lambda(cfg):
                     reward_mode=reward_mode, seed=seed,
                 )
 
-                is_trace = (lam == trace_cfg['lambda'] and seed == trace_seed)
+                is_trace = (reward_mode == trace_cfg['reward_mode']
+                            and lam == trace_cfg['lambda'] and seed == trace_seed)
                 trace_rows, trace_dump_rows = [], []
 
                 def step_cb(row, _rows=trace_rows):
@@ -378,7 +379,7 @@ def run_sarsa_lambda(cfg):
                     per_episode_success.append(int(row['success']))
                     per_episode_return.append(row['total_reward'])
                     training_rows.append({
-                        'lambda': lam, 'seed': seed,
+                        'reward_mode': reward_mode, 'lambda': lam, 'seed': seed,
                         'episode': row['episode_idx'],
                         'epsilon': row['epsilon_final'],
                         'steps': row['steps'], 'return': row['total_reward'],
@@ -432,7 +433,7 @@ def run_sarsa_lambda(cfg):
                 first_success = next(
                     (i for i, s in enumerate(per_episode_success) if s == 1), None)
                 summary_rows.append({
-                    'lambda': lam, 'seed': seed,
+                    'reward_mode': reward_mode, 'lambda': lam, 'seed': seed,
                     'first_success_episode': first_success,
                     'episodes_to_90pct_success': _rolling_success_episode(per_episode_success),
                     'final_train_success_rate': float(np.mean(per_episode_success[-100:])),
