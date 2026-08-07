@@ -6,16 +6,69 @@ from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from environments.maze import MazeEnv, load_config
+from environments.maze import MazeEnv, CellType, load_config
 from agents.value_iteration import ValueIteration
 from experiments.run_experiments import derive_seeds
 
 MAP_PATH = 'environments/maps/source_maze.json'
+
+# Match gui_micro_roadmap / CustomTkinter maze hex table
+_CELL_COLOR = {
+    CellType.WALL:    '#2D2D2D',
+    CellType.EMPTY:   '#FFFFFF',
+    CellType.PENALTY: '#FF6464',
+    CellType.START:   '#64C864',
+    CellType.KEY:     '#FFD700',
+    CellType.DOOR:    '#8B5A2B',
+    CellType.GOAL:    '#00C800',
+}
+_CELL_LABEL = {
+    CellType.START:   ('S', '#003300'),
+    CellType.KEY:     ('K', '#000000'),
+    CellType.DOOR:    ('D', '#FFFFFF'),
+    CellType.GOAL:    ('G', '#003300'),
+    CellType.PENALTY: ('P', '#FFFFFF'),
+}
+_ARROW_SYM = {0: '\u2191', 1: '\u2193', 2: '\u2190', 3: '\u2192'}
+
+VALUE_CMAP = LinearSegmentedColormap.from_list(
+    'value_blue', ['#FFFFFF', '#C6DBEF', '#6BAED6', '#2171B5', '#08306B'])
+VALUE_CMAP.set_bad(color=(1, 1, 1, 0))
+AGREE_CMAP = LinearSegmentedColormap.from_list(
+    'agree_rwg', ['#D73027', '#FFFFFF', '#1A9850'])
+AGREE_CMAP.set_bad(color=(1, 1, 1, 0))
+
+
+def _draw_maze_cells(ax, env):
+    """Base grid only (no letters/arrows). Overlay comes after imshow."""
+    for r in range(env.maze_size):
+        for c in range(env.maze_size):
+            ct = CellType(int(env.grid[r, c]))
+            ax.add_patch(plt.Rectangle(
+                (c - 0.5, r - 0.5), 1, 1,
+                facecolor=_CELL_COLOR.get(ct, '#FFFFFF'),
+                edgecolor='#B0B0B0', linewidth=0.35, zorder=1))
+    ax.set_xlim(-0.5, env.maze_size - 0.5)
+    ax.set_ylim(env.maze_size - 0.5, -0.5)
+    ax.set_aspect('equal')
+    ax.set_facecolor('#FFFFFF')
+    ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+
+
+def _overlay_cell_labels(ax, env):
+    for r in range(env.maze_size):
+        for c in range(env.maze_size):
+            ct = CellType(int(env.grid[r, c]))
+            if ct in _CELL_LABEL:
+                txt, tc = _CELL_LABEL[ct]
+                ax.text(c, r - 0.32, txt, ha='center', va='top',
+                        fontsize=8, color=tc, fontweight='bold', zorder=5)
 
 
 def _load_json(path):
@@ -188,31 +241,139 @@ def select_sample_states(disagreements, env, min_visits=10):
     }
 
 
-def plot_policy_diff(vi_policy, Q_by_state, visits_by_state, states, maze_size,
-                      has_key, out_path, title):
-    agree_count = np.zeros((maze_size, maze_size))
-    total_count = np.zeros((maze_size, maze_size))
-    for s in states:
-        r, c, hk, en = s
-        if hk != has_key or s not in vi_policy:
-            continue
-        if visits_by_state.get(s, 0) == 0:
-            continue
-        agent_a = Q_by_state.get(s)
-        if agent_a is None:
-            continue
-        total_count[r, c] += 1
-        if agent_a == vi_policy[s]:
-            agree_count[r, c] += 1
-    frac = np.divide(agree_count, total_count,
-                      out=np.full_like(agree_count, np.nan), where=total_count > 0)
-    fig, ax = plt.subplots(figsize=(7, 7))
-    im = ax.imshow(frac, cmap=plt.get_cmap('RdYlGn'), vmin=0, vmax=1)
-    ax.set_title(title + '\n(share of visited energy levels agreeing with VI; unvisited cells blank)')
-    fig.colorbar(im, ax=ax, fraction=0.046, label='agreement fraction (1=always agree)')
-    plt.tight_layout()
+def _representative_energy(result):
+    totals = {}
+    for key in ('ql', 'sarsa'):
+        for s, v in zip(result[key]['states'], result[key]['visits']):
+            r, c, hk, en = s
+            totals[(r, c, hk, en)] = totals.get((r, c, hk, en), 0) + int(v)
+    rep = {}
+    for (r, c, hk, en), v in totals.items():
+        cur = rep.get((r, c, hk))
+        if cur is None or v > cur[1]:
+            rep[(r, c, hk)] = (en, v)
+    return {k: v[0] for k, v in rep.items()}
+
+
+def plot_policy_grid(result, env, out_path):
+    fig, axes = plt.subplots(3, 2, figsize=(14, 19), facecolor='white')
+    fig.suptitle('Learned policy per algorithm \u2014 arrows = greedy action, '
+                 'shade = own V / max-Q at most-visited energy', fontsize=11)
+
+    vi_model = result['vi']['model']
+    vi_states = [tuple(s) for s in vi_model['states']]
+    vi_V = {s: v for s, v in zip(vi_states, vi_model['V'])}
+    vi_policy = result['vi']['policy']
+
+    def ql_sarsa_lookup(key):
+        states, Q, visits = result[key]['states'], result[key]['Q'], result[key]['visits']
+        val, pol = {}, {}
+        for s, q, v in zip(states, Q, visits):
+            if v > 0:
+                val[s] = float(np.max(q))
+                pol[s] = int(np.argmax(q))
+        return val, pol
+
+    ql_val, ql_pol = ql_sarsa_lookup('ql')
+    sarsa_val, sarsa_pol = ql_sarsa_lookup('sarsa')
+
+    max_energy = env.MAX_ENERGY
+    rep = _representative_energy(result)
+
+    scale_vals = []
+    for (r, c, hk), en in rep.items():
+        for d in (vi_V, ql_val, sarsa_val):
+            v = d.get((r, c, hk, en))
+            if v is not None and not (isinstance(v, float) and np.isnan(v)):
+                scale_vals.append(v)
+    if not scale_vals:
+        scale_vals = [v for s, v in vi_V.items() if s[3] == max_energy]
+    global_vmax = max(scale_vals) if scale_vals else 1.0
+    global_vmin = min(0.0, min(scale_vals)) if scale_vals else 0.0
+
+    rows = [
+        ('Value Iteration', lambda s: vi_V.get(s, np.nan), lambda s: vi_policy.get(s)),
+        ('Q-Learning',      lambda s: ql_val.get(s, np.nan), lambda s: ql_pol.get(s)),
+        ('SARSA(\u03bb)',     lambda s: sarsa_val.get(s, np.nan), lambda s: sarsa_pol.get(s)),
+    ]
+
+    for row_idx, (label, val_fn, pol_fn) in enumerate(rows):
+        for col_idx, has_key in enumerate((0, 1)):
+            ax = axes[row_idx][col_idx]
+            _draw_maze_cells(ax, env)
+            grid_val = np.full((env.maze_size, env.maze_size), np.nan)
+            for r in range(env.maze_size):
+                for c in range(env.maze_size):
+                    if int(env.grid[r, c]) == CellType.WALL:
+                        continue
+                    en = rep.get((r, c, has_key), max_energy)
+                    v = val_fn((r, c, has_key, en))
+                    if v is not None and not (isinstance(v, float) and np.isnan(v)):
+                        grid_val[r, c] = v
+            ax.imshow(grid_val, cmap=VALUE_CMAP, vmin=global_vmin, vmax=global_vmax,
+                      alpha=0.65, zorder=2, interpolation='nearest',
+                      extent=(-0.5, env.maze_size - 0.5, env.maze_size - 0.5, -0.5))
+            for r in range(env.maze_size):
+                for c in range(env.maze_size):
+                    en = rep.get((r, c, has_key), max_energy)
+                    a = pol_fn((r, c, has_key, en))
+                    if a is not None:
+                        ax.text(c, r + 0.08, _ARROW_SYM[a], ha='center', va='center',
+                                fontsize=11, color='#111111', zorder=6,
+                                fontweight='bold')
+            _overlay_cell_labels(ax, env)
+            key_label = 'No key (k=0)' if has_key == 0 else 'Has key (k=1)'
+            ax.set_title(f'{label} \u2014 {key_label}', fontsize=9)
+
+    fig.subplots_adjust(right=0.88)
+    cax = fig.add_axes([0.90, 0.15, 0.02, 0.7])
+    sm = plt.cm.ScalarMappable(cmap=VALUE_CMAP, norm=plt.Normalize(global_vmin, global_vmax))
+    fig.colorbar(sm, cax=cax, label='V (VI) / max Q (QL, SARSA) at most-visited energy')
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(out_path, dpi=200, bbox_inches='tight')
+    plt.savefig(out_path, dpi=200, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+    print(f'saved {out_path}')
+
+
+def plot_agreement_grid(vi_policy, result, env, out_path):
+    fig, axes = plt.subplots(2, 2, figsize=(14, 14), facecolor='white')
+    fig.suptitle('Agent policy vs. VI agreement (share of visited energy levels)',
+                 fontsize=11)
+    algo_items = [('ql', 'Q-Learning'), ('sarsa', 'SARSA(\u03bb)')]
+    n_walkable = int(np.sum(env.grid != CellType.WALL))
+    im = None
+    for row_idx, (key, label) in enumerate(algo_items):
+        states, Q, visits = result[key]['states'], result[key]['Q'], result[key]['visits']
+        Q_by_state = {s: int(np.argmax(q)) for s, q in zip(states, Q)}
+        visits_by_state = {s: int(v) for s, v in zip(states, visits)}
+        for col_idx, has_key in enumerate((0, 1)):
+            ax = axes[row_idx][col_idx]
+            _draw_maze_cells(ax, env)
+            agree = np.zeros((env.maze_size, env.maze_size))
+            total = np.zeros((env.maze_size, env.maze_size))
+            for s in states:
+                r, c, hk, en = s
+                if hk != has_key or s not in vi_policy or visits_by_state.get(s, 0) == 0:
+                    continue
+                agent_a = Q_by_state.get(s)
+                if agent_a is None:
+                    continue
+                total[r, c] += 1
+                if agent_a == vi_policy[s]:
+                    agree[r, c] += 1
+            frac = np.divide(agree, total, out=np.full_like(agree, np.nan), where=total > 0)
+            im = ax.imshow(frac, cmap=AGREE_CMAP, vmin=0, vmax=1, alpha=0.70, zorder=2,
+                           interpolation='nearest',
+                           extent=(-0.5, env.maze_size - 0.5, env.maze_size - 0.5, -0.5))
+            _overlay_cell_labels(ax, env)
+            visited_cells = int(np.sum(total > 0))
+            key_label = 'No key (k=0)' if has_key == 0 else 'Has key (k=1)'
+            ax.set_title(f'{label} \u2014 {key_label}\nVisited: {visited_cells} / '
+                         f'{n_walkable}', fontsize=9)
+    fig.colorbar(im, ax=axes, shrink=0.6, pad=0.02,
+                 label='Agreement fraction (1.0 = always matches VI)')
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path, dpi=200, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     print(f'saved {out_path}')
 
@@ -222,7 +383,6 @@ def main():
     _check_prereqs(cfg)
     result = build_comparison(cfg)
     env = result['env']
-    maze_size, max_energy = env.maze_size, env.MAX_ENERGY
 
     out_dir = Path('results/raw_data/comparison')
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -296,19 +456,9 @@ def main():
             writer.writerows(sample_rows)
         print(f"saved {out_dir / 'comparison_sample_states.csv'}")
 
-    for algo_key, label in (('ql', 'QL'), ('sarsa', 'SARSA')):
-        algo_states = result[algo_key]['states']
-        algo_Q = result[algo_key]['Q']
-        algo_visits = result[algo_key]['visits']
-        Q_by_state = {s: int(np.argmax(q)) for s, q in zip(algo_states, algo_Q)}
-        visits_by_state = {s: int(v) for s, v in zip(algo_states, algo_visits)}
-        for has_key, tag in ((0, 'prekey'), (1, 'postkey')):
-            plot_policy_diff(
-                    result['vi']['policy'], Q_by_state, visits_by_state, algo_states,
-                    maze_size, has_key,
-                    f'results/figures/comparison/{algo_key}_policy_diff_{tag}.png',
-                    f'{label} vs VI agreement (has_key={has_key})',
-            )
+    plot_policy_grid(result, env, 'results/figures/comparison/policy_grid.png')
+    plot_agreement_grid(result['vi']['policy'], result, env,
+                        'results/figures/comparison/agreement_grid.png')
 
 
 if __name__ == '__main__':

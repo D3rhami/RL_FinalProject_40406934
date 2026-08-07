@@ -12,12 +12,13 @@
 4. [Transfer Learning](#transfer-learning)
 5. [GUI](#gui)
 6. [Installation](#installation)
-7. [Running the Project](#running-the-project)
-8. [Reproducing Results](#reproducing-results)
-9. [Project Structure](#project-structure)
-10. [Results Summary](#results-summary)
-11. [AI Usage Disclosure](#ai-usage-disclosure)
-12. [References](#references)
+7. [Config identity](#config-identity)
+8. [Running the Project](#running-the-project)
+9. [Reproducing Results](#reproducing-results-phases-4-9)
+10. [Project Structure](#project-structure)
+11. [Results Summary](#results-summary)
+12. [AI Usage Disclosure](#ai-usage-disclosure)
+13. [References](#references)
 
 ---
 
@@ -64,33 +65,167 @@ cd RL_FinalProject_40406934
 pip install -r requirements.txt
 ```
 
+Run all commands below from the repository root.
+
+`requirements.txt` pins: `numpy`, `pandas`, `matplotlib`, `customtkinter`,
+`pillow`, `pytest`, and `pygame` (optional animation; GUI uses customtkinter).
+
+## Config identity
+
+From `experiments/configs/default_config.json` (also shown in the header above):
+
+| Field | Value |
+|-------|-------|
+| `student_id` | `40406934` |
+| `base_seed` | `3` |
+| `maze_size` | `18` (18 × 18) |
+| `env.max_energy` | `60` |
+
+Training episode counts in the same config:
+
+- Q-Learning / SARSA(λ): **50,000** episodes (`q_learning.num_episodes`, `sarsa_lambda.num_episodes`)
+- Transfer: **shaped** reward, **5,000** episodes (`transfer.reward_mode`, `transfer.num_episodes`)
+
 ## Running the Project
 
-```bash
-# Launch the GUI (Phase 10 — not yet wired)
-python main.py
+### Maps (generate if needed)
 
-# Single-algorithm CLI (saves models under results/models/ in the same schema
-# as the full pipeline; useful for a quick smoke check or one-off re-run)
+```bash
+# Source maze → environments/maps/source_maze.json
+python environments/generator.py
+
+# Transfer targets → target_similar.json / target_different.json
+python environments/generator.py --targets
+```
+
+Skip these if `environments/maps/*.json` is already present; re-run only to regenerate.
+
+### Experiments
+
+```bash
+# Full default grid: VI + Q-Learning + SARSA (transfer is separate)
+python experiments/run_experiments.py
+
+# Selective: vi | q_learning | sarsa | transfer
+python experiments/run_experiments.py vi
+python experiments/run_experiments.py q_learning
+python experiments/run_experiments.py sarsa
+python experiments/run_experiments.py transfer
+```
+
+Aliases accepted: `vi` / `value_iteration`, `q_learning`, `sarsa` / `sarsa_lambda`,
+`transfer` / `transfer_learning`. Multiple names can be passed on one line
+(e.g. `python experiments/run_experiments.py q_learning sarsa`).
+
+Optional flags: `--config PATH`, `--dry-run` (short episodes for smoke tests),
+`--fresh` (clear `results/raw_data/run_ledger.csv` before starting).
+
+QL/SARSA train for **50,000** episodes; transfer uses **shaped** reward and
+**5,000** episodes (see Config identity).
+
+### Figures
+
+```bash
+python experiments/analysis.py && python experiments/compare.py
+```
+
+### GUI
+
+```bash
+python gui/app.py
+# or
+python -m gui.app
+```
+
+### Tests
+
+```bash
+pytest tests/
+```
+
+### Single-algorithm CLI (smoke / one-off)
+
+```bash
 python main.py --algo value_iteration --gamma 0.95 --max-iterations 1000
 python main.py --algo q_learning --schedule linear --num-episodes 10000
 python main.py --algo q_learning --schedule exponential --num-episodes 10000
 python main.py --algo sarsa_lambda --lam 0.7 --num-episodes 10000
-
-# Full experiment grid (the real pipeline for analysis/compare)
-python experiments/run_experiments.py
-
-# Energy-budget probe (shows the custom fuel feature has a real effect)
-python experiments/energy_sweep.py
-
-# Run unit tests
-pytest tests/
 ```
 
 `main.py --algo …` writes a single model JSON (+ a summary CSV for QL/SARSA)
 compatible with `results/models/{vi,q_learning,sarsa}/`. It does **not** produce
 the full multi-seed / multi-variant CSVs that `analysis.py` and `compare.py`
 expect — use `experiments/run_experiments.py` for that.
+
+### Energy sweep
+
+```bash
+python experiments/energy_sweep.py
+```
+
+## Reproducing Results (Phases 4-9)
+
+End-to-end from a clean clone:
+
+```bash
+pip install -r requirements.txt
+
+# 1. Maps (skip if environments/maps/*.json already present)
+python environments/generator.py
+python environments/generator.py --targets
+
+# 2. Train (VI γ-sweep; QL 2×2×3 seeds; SARSA 4 λ × 3 seeds; 50k eps)
+python experiments/run_experiments.py
+
+# 3. Transfer (shaped reward, 5000 episodes; needs target maps + a source QL model)
+python experiments/run_experiments.py transfer
+
+# 4. Figures from saved CSVs/models
+python experiments/analysis.py && python experiments/compare.py
+
+# 5. Optional checks
+pytest tests/
+python gui/app.py
+```
+
+All grid parameters live in `experiment_grid` (and algorithm blocks) in
+`experiments/configs/default_config.json`.
+
+### Outputs under `results/`
+
+| Path | Contents |
+|------|----------|
+| `results/raw_data/run_ledger.csv` | One row per variant attempted (success/failed) |
+| `results/raw_data/{vi,q_learning,sarsa,transfer,comparison,energy}/` | Training curves, summaries, traces |
+| `results/models/{vi,q_learning,sarsa,transfer}/` | Saved V/Q tables + policies (JSON) |
+| `results/figures/{vi,q_learning,sarsa,comparison,transfer,misc}/` | Generated PNGs |
+| `results/videos/` | Optional GUI recordings |
+
+Notable CSVs:
+
+- `results/raw_data/comparison/comparison_summary.csv` — Phase 8 comparison table
+- `results/raw_data/comparison/comparison_sample_states.csv` — sample mismatched states (Step 54)
+- `results/raw_data/transfer/transfer_summary.csv` / `transfer_training.csv` — transfer metrics
+
+### Eligibility trace type
+
+SARSA(lambda) uses `"trace_type": "replacing"` (see `experiments/configs/default_config.json`).
+Replacing traces cap `E(s,a)` at 1.0 on revisit, preventing runaway trace magnitudes
+on states visited many times within a single episode (loops near penalty cells,
+repeated wall-bump retries near the energy budget). Accumulating traces
+would let those revisits stack unbounded, over-weighting frequently-revisited
+states in the update. The `E` dict in `agents/sarsa_lambda.py` (`SarsaLambdaAgent._apply_trace`)
+is a sparse dict keyed by `(state_idx, action)`, decayed by `gamma*lambda` every
+step and pruned once a trace drops below `1e-6` — this keeps updates fast even
+though the full state-action space has tens of thousands of entries
+(~39.5k states at `max_energy=60`).
+
+### Trace-run seed note
+
+`experiment_grid.*.trace_run` selects which *variant* gets a detailed step dump
+(reward_mode / schedule / λ / episode_index). The training seed for that dump is
+deliberately `seeds[0]` from `derive_seeds(...)`, not a separate config field —
+so the traced episode always comes from a seed that was actually trained.
 
 ### Sanity-check a single episode with the logger
 
@@ -103,55 +238,6 @@ key_pickup, door_attempt, door_open, goal_reached, step_cap, energy_depleted)
 and asserts all 9 appear in the detailed per-step logs. Summary CSV and detail
 JSON files land in `results/raw_data/verify_logger_summary.csv` and
 `results/raw_data/verify_logger_details/`.
-
-### Eligibility trace type
-
-SARSA(lambda) uses `"trace_type": "replacing"` (see `experiments/configs/default_config.json`).
-Replacing traces cap `E(s,a)` at 1.0 on revisit, preventing runaway trace magnitudes
-on states visited many times within a single episode (loops near penalty cells,
-repeated wall-bump retries near the energy budget). Accumulating traces
-would let those revisits stack unbounded, over-weighting frequently-revisited
-states in the update. The `E` dict in `agents/sarsa_lambda.py` (`SarsaLambdaAgent._apply_trace`)
-is a sparse dict keyed by `(state_idx, action)`, decayed by `gamma*lambda` every
-step and pruned once a trace drops below `1e-6` — this keeps updates fast even
-though the full state-action space has ~65,000 entries at `max_energy=100`.
-
-### Trace-run seed note
-
-`experiment_grid.*.trace_run` selects which *variant* gets a detailed step dump
-(reward_mode / schedule / λ / episode_index). The training seed for that dump is
-deliberately `seeds[0]` from `derive_seeds(...)`, not a separate config field —
-so the traced episode always comes from a seed that was actually trained.
-
-## Reproducing Results (Phases 4-8)
-
-Full experiment grid: VI gamma-sweep (3 runs), Q-Learning (2 reward_modes x 2
-schedules x 3 seeds = 12 runs), SARSA(lambda) (4 lambdas x 3 seeds = 12 runs).
-All parameters live in `experiment_grid` in `experiments/configs/default_config.json`.
-
-```bash
-# Run everything (VI ~200s, QL ~100s, SARSA ~200s -- a few minutes total)
-python experiments/run_experiments.py
-
-# Or run a subset (re-run just one algorithm after a fix)
-python experiments/run_experiments.py vi
-python experiments/run_experiments.py q_learning
-python experiments/run_experiments.py sarsa
-
-# Generate all figures from the saved CSVs/models (Steps 28, 31, 39, 48)
-python experiments/analysis.py
-
-# Phase 8 cross-algorithm comparison (run only after the above succeeds)
-python experiments/compare.py
-```
-
-Outputs:
-- `results/raw_data/run_ledger.csv` -- one row per variant attempted (success/failed)
-- `results/raw_data/{vi,q_learning,sarsa}/*.csv` -- training curves + summaries
-- `results/models/{vi,q_learning,sarsa}/*.json` -- saved V/Q tables + policies
-- `results/figures/{vi,q_learning,sarsa,comparison}/*.png` -- all required figures
-- `results/raw_data/comparison/comparison_summary.csv` -- Phase 8 comparison table
-- `results/raw_data/comparison/comparison_sample_states.csv` -- the 3 required sample states (Step 54)
 
 ### Energy budget selection (`max_energy`)
 
@@ -197,7 +283,7 @@ the *optimal* policy, so it shows where the budget becomes too tight to solve at
   budget (203.65 / 38.75). **This is the smallest budget with a fully reliable optimal
   policy, i.e. the tight-but-solvable boundary.**
 
-**Decision: `max_energy = 60`.**
+**Decision: `max_energy = 60`** (set in `experiments/configs/default_config.json`).
 
 - It is a genuine constraint: random policy dies of fuel in 100% of episodes, and the
   budget (60) is only ~1.5× the ~39 energy units the optimal policy actually needs —
@@ -211,10 +297,6 @@ the *optimal* policy, so it shows where the budget becomes too tight to solve at
   so the earlier max_energy=200 "failure" was about the budget ceasing to bind an
   *optimal* agent — energy never stops being fatal for a no-skill policy.
 
-**Caveat:** `experiments/configs/default_config.json` still sets `"max_energy": 100`.
-The final full-grid runs (Phases 4–8) should be re-run at 60 for the tighter,
-smaller MDP before locking in the numbers in this README.
-
 ## Project Structure
 
 ```
@@ -222,15 +304,15 @@ RL_FinalProject_40406934/
 ├── environments/       # Maze env, generator, saved maps
 ├── agents/             # Value Iteration, Q-Learning, SARSA(λ)
 ├── transfer/           # Transfer learning scenarios
-├── gui/                # Pygame app and renderer
+├── gui/                # customtkinter app (`gui/app.py`)
 ├── experiments/        # Experiment runners, analysis, configs
 ├── results/
-│   ├── raw_data/       # Per-episode CSV logs
-│   ├── models/         # Saved Q-tables / V-tables
-│   ├── figures/        # All saved plot images
+│   ├── raw_data/       # CSVs: vi, q_learning, sarsa, transfer, comparison, energy
+│   ├── models/         # Saved Q-tables / V-tables (vi, q_learning, sarsa, transfer)
+│   ├── figures/        # Plots (vi, q_learning, sarsa, comparison, transfer, misc)
 │   └── videos/         # GUI recordings
 ├── tests/              # pytest unit tests
-├── main.py
+├── main.py             # Single-algo CLI dispatcher
 ├── requirements.txt
 └── README.md
 ```

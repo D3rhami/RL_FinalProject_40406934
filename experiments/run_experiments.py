@@ -477,6 +477,15 @@ ALGO_RUNNERS = {
 }
 
 
+def run_transfer(cfg):
+    from transfer.transfer_learning import run_transfer_experiments
+    return run_transfer_experiments(cfg)
+
+
+ALGO_RUNNERS['transfer'] = run_transfer
+ALGO_RUNNERS['transfer_learning'] = run_transfer
+
+
 def main():
     args = sys.argv[1:]
 
@@ -500,6 +509,8 @@ def main():
     if dry_run:
         cfg['q_learning']['num_episodes'] = 50
         cfg['sarsa_lambda']['num_episodes'] = 50
+        cfg['transfer']['num_episodes'] = 50
+        cfg['transfer']['eval_episodes'] = 10
         cfg['experiment_grid']['eval_episodes'] = 10
         cfg['experiment_grid']['q_learning']['trace_run']['episode_index'] = 10
         cfg['experiment_grid']['sarsa_lambda']['trace_run']['episode_index'] = 10
@@ -522,7 +533,7 @@ def main():
         for name in requested:
             fn = ALGO_RUNNERS.get(name)
             if fn is None:
-                print(f"Unknown algorithm '{name}'. Choices: vi, q_learning, sarsa")
+                print(f"Unknown algorithm '{name}'. Choices: vi, q_learning, sarsa, transfer")
                 continue
             if fn not in seen:
                 to_run.append(fn)

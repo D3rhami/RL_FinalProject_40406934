@@ -183,7 +183,105 @@ def print_maze(data: dict):
     print(f"penalty={data['penalty_cells']}")
 
 
+def create_target_map(source_data, obstacle_change_pct, relocate_key_goal,
+                       n_extra_penalty, max_energy, rng, max_attempts=200):
+    size = source_data['maze_size']
+    start_pos = tuple(source_data['start_pos'])
+
+    for attempt in range(max_attempts):
+        grid = np.array(source_data['grid'], dtype=np.int32).copy()
+        key_pos = tuple(source_data['key_pos'])
+        door_pos = tuple(source_data['door_pos'])
+        goal_pos = tuple(source_data['goal_pos'])
+        penalty_cells = [tuple(p) for p in source_data['penalty_cells']]
+
+        walls = [(r, c) for r in range(size) for c in range(size)
+                 if grid[r, c] == CellType.WALL]
+        empties = [(r, c) for r in range(size) for c in range(size)
+                   if grid[r, c] == CellType.EMPTY]
+        n_move = max(1, int(len(walls) * obstacle_change_pct))
+        rng.shuffle(walls)
+        rng.shuffle(empties)
+        for w, e in zip(walls[:n_move], empties[:n_move]):
+            grid[w], grid[e] = CellType.EMPTY, CellType.WALL
+
+        if relocate_key_goal:
+            for pos in (key_pos, door_pos, goal_pos):
+                grid[pos] = CellType.EMPTY
+            free = [(r, c) for r in range(size) for c in range(size)
+                    if grid[r, c] == CellType.EMPTY and (r, c) != start_pos]
+            if len(free) < 3 + n_extra_penalty:
+                continue
+            rng.shuffle(free)
+            key_pos, door_pos, goal_pos = free[0], free[1], free[2]
+            grid[key_pos] = CellType.KEY
+            grid[door_pos] = CellType.DOOR
+            grid[goal_pos] = CellType.GOAL
+            for pos in free[3:3 + n_extra_penalty]:
+                grid[pos] = CellType.PENALTY
+                penalty_cells.append(pos)
+
+        candidate = {
+            **{k: v for k, v in source_data.items()
+               if k not in ('grid', 'key_pos', 'door_pos', 'goal_pos',
+                            'penalty_cells', 'actual_seed')},
+            'grid': grid,
+            'start_pos': start_pos,
+            'key_pos': key_pos,
+            'door_pos': door_pos,
+            'goal_pos': goal_pos,
+            'penalty_cells': penalty_cells,
+            'obstacle_change_pct': obstacle_change_pct,
+            'relocate_key_goal': relocate_key_goal,
+            'n_extra_penalty': n_extra_penalty if relocate_key_goal else 0,
+            'generation_attempt': attempt,
+        }
+        if validate_map(candidate, max_energy):
+            return candidate
+    raise RuntimeError(
+        f'no valid target map found (pct={obstacle_change_pct}, '
+        f'relocate={relocate_key_goal}) after {max_attempts} attempts')
+
+
+def generate_target_maps(cfg=None):
+    cfg = cfg or load_config(str(CONFIG_PATH))
+    source = load_map()
+    max_energy = cfg['env']['max_energy']
+    tcfg = cfg['transfer']
+    maps_dir = Path(__file__).parent / 'maps'
+
+    similar_rng = np.random.default_rng(cfg['base_seed'] + 1000)
+    similar = create_target_map(
+        source, tcfg['similar_obstacle_change_pct'], False, 0,
+        max_energy, similar_rng)
+    similar['map_kind'] = 'similar'
+    similar_path = maps_dir / 'target_similar.json'
+    save_map(similar, similar_path)
+
+    different_rng = np.random.default_rng(cfg['base_seed'] + 2000)
+    different = create_target_map(
+        source, tcfg['different_obstacle_change_pct'], True, 3,
+        max_energy, different_rng)
+    different['map_kind'] = 'different'
+    different_path = maps_dir / 'target_different.json'
+    save_map(different, different_path)
+
+    print('Similar map validated:')
+    print_maze(similar)
+    print('Different map validated:')
+    print_maze(different)
+    return similar_path, different_path
+
+
 if __name__ == '__main__':
-    data = generate_valid_maze()
-    print_maze(data)
-    save_map(data)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--targets', action='store_true',
+                        help='Generate similar/different transfer target maps')
+    args = parser.parse_args()
+    if args.targets:
+        generate_target_maps()
+    else:
+        data = generate_valid_maze()
+        print_maze(data)
+        save_map(data)
