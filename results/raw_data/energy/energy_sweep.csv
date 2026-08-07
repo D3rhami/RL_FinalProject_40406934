@@ -1,0 +1,8 @@
+max_energy,shortest_path,bfs_valid,n_states,random_episodes,random_energy_depleted_rate,random_goal_rate,random_step_cap_rate,random_mean_return,random_mean_steps,vi_gamma,vi_eval_success_rate,vi_eval_mean_return,vi_eval_mean_steps,vi_iterations,vi_runtime_seconds,vi_converged,ql_probe_eval_success,ql_probe_eval_mean_return,ql_probe_eval_mean_steps,ql_probe_train_seconds,sarsa_probe_eval_success,sarsa_probe_eval_mean_return,sarsa_probe_eval_mean_steps,sarsa_probe_train_seconds
+60,30,True,39528,200,1.0,0.0,0.0,-117.13,60.0,0.95,1.0,203.65,38.75,61,87.0,True,,,,,,,,
+100,30,True,65448,200,1.0,0.0,0.0,-201.71,100.0,0.95,1.0,203.65,38.75,92,212.18,True,,,,,,,,
+150,30,True,97848,200,1.0,0.0,0.0,-306.52,150.0,0.95,1.0,203.65,38.75,92,345.42,True,,,,,,,,
+200,30,True,130248,200,0.995,0.005,0.0,-412.255,199.845,0.95,1.0,203.65,38.75,92,341.22,True,,,,,,,,
+300,30,True,195048,200,0.975,0.025,0.0,-617.91,299.25,0.95,1.0,203.65,38.75,92,581.4,True,,,,,,,,
+400,30,True,259848,200,0.975,0.025,0.0,-820.2,396.75,0.95,1.0,203.65,38.75,92,614.1,True,,,,,,,,
+500,30,True,324648,200,0.97,0.03,0.0,-1015.835,493.895,0.95,1.0,203.65,38.75,92,747.51,True,,,,,,,,
